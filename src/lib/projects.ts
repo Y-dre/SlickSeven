@@ -1,4 +1,5 @@
-import type { AyudaProject, DependencyItem } from "../types";
+import type { AyudaProject, DependencyItem, ProjectStatus } from "../types";
+import { parseGoogleMapsPosition } from "./maps";
 
 export const PROJECTS_API_PATH = "/api/projects";
 
@@ -9,7 +10,29 @@ export interface ValidationResult {
 
 export const defaultDependencyLabels = ["Funds Ready", "Venue Ready", "Staff Ready"];
 
+function normalizeStatus(value: unknown): ProjectStatus {
+  if (value === "active" || value === "ongoing") {
+    return "active";
+  }
+
+  if (value === "archived" || value === "moved" || value === "cancelled") {
+    return "archived";
+  }
+
+  return "upcoming";
+}
+
+function normalizeBeneficiaryClassification(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function isNumericOnly(value: string): boolean {
+  return /^\d+(\.\d+)?$/.test(value.trim());
+}
+
 function normalizeProject(project: AyudaProject): AyudaProject {
+  const mapPosition = parseGoogleMapsPosition(project.location?.mapsUrl);
+
   return {
     ...project,
     name: typeof project.name === "string" ? project.name : "",
@@ -22,12 +45,13 @@ function normalizeProject(project: AyudaProject): AyudaProject {
     location: {
       address: project.location?.address ?? "",
       placeId: project.location?.placeId,
-      lat: project.location?.lat,
-      lng: project.location?.lng,
+      lat: project.location?.lat ?? mapPosition?.lat,
+      lng: project.location?.lng ?? mapPosition?.lng,
       mapsUrl: project.location?.mapsUrl ?? "",
     },
     schedule: project.schedule ?? "",
-    beneficiaryTarget: Number.isFinite(project.beneficiaryTarget) ? project.beneficiaryTarget : 0,
+    scheduleEnd: project.scheduleEnd ?? "",
+    beneficiaryTarget: normalizeBeneficiaryClassification(project.beneficiaryTarget),
     dependencies: Array.isArray(project.dependencies)
       ? project.dependencies
           .filter((dependency): dependency is DependencyItem => Boolean(dependency?.id && dependency?.label))
@@ -38,9 +62,7 @@ function normalizeProject(project: AyudaProject): AyudaProject {
           }))
       : [],
     publishState: project.publishState === "published" ? "published" : "draft",
-    status: ["upcoming", "ongoing", "moved", "cancelled"].includes(project.status)
-      ? project.status
-      : "upcoming",
+    status: normalizeStatus(project.status),
     statusNote: project.statusNote ?? "",
     createdAt: project.createdAt ?? new Date().toISOString(),
     updatedAt: project.updatedAt ?? new Date().toISOString(),
@@ -76,7 +98,8 @@ export function createEmptyProject(): AyudaProject {
       mapsUrl: "",
     },
     schedule: "",
-    beneficiaryTarget: 0,
+    scheduleEnd: "",
+    beneficiaryTarget: "",
     dependencies: defaultDependencyLabels.map((label) => createDependency(label)),
     publishState: "draft",
     status: "upcoming",
@@ -105,11 +128,21 @@ export function validateProjectForPublish(project: AyudaProject): ValidationResu
   }
 
   if (!project.schedule) {
-    errors.push("Date and time are required.");
+    errors.push("Start date and time are required.");
   }
 
-  if (!Number.isFinite(project.beneficiaryTarget) || project.beneficiaryTarget <= 0) {
-    errors.push("Beneficiary target must be greater than zero.");
+  if (!project.scheduleEnd) {
+    errors.push("End date and time are required.");
+  }
+
+  if (project.schedule && project.scheduleEnd && new Date(project.scheduleEnd) < new Date(project.schedule)) {
+    errors.push("End date and time must be after the start date and time.");
+  }
+
+  if (!project.beneficiaryTarget.trim()) {
+    errors.push("Beneficiary classification is required.");
+  } else if (isNumericOnly(project.beneficiaryTarget)) {
+    errors.push("Beneficiary target must be a classification, not a number.");
   }
 
   if (project.requirements.filter(Boolean).length === 0) {

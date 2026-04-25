@@ -31,6 +31,7 @@ def main() -> None:
                       lng,
                       maps_url,
                       schedule_at,
+                      schedule_end_at,
                       beneficiary_target,
                       publish_state,
                       status,
@@ -38,7 +39,7 @@ def main() -> None:
                       created_at,
                       updated_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     [
                         project["id"],
@@ -49,6 +50,7 @@ def main() -> None:
                         location.get("lng"),
                         location.get("mapsUrl", ""),
                         to_sql_datetime(project["schedule"]),
+                        to_sql_datetime(project.get("scheduleEnd", "")),
                         project["beneficiaryTarget"],
                         project["publishState"],
                         project["status"],

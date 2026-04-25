@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import re
 import uuid
 from datetime import date, datetime, timezone
 from decimal import Decimal
@@ -11,7 +12,12 @@ from pymysql.cursors import DictCursor
 
 from .config import DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, DB_USER
 
-PROJECT_STATUSES = {"upcoming", "ongoing", "moved", "cancelled"}
+PROJECT_STATUSES = {"upcoming", "active", "archived"}
+LEGACY_STATUS_MAP = {
+    "ongoing": "active",
+    "moved": "archived",
+    "cancelled": "archived",
+}
 
 
 def _quote_identifier(value: str) -> str:
@@ -76,6 +82,52 @@ def _parse_datetime(value: Any) -> datetime | None:
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def _normalize_status(value: Any) -> str:
+    if isinstance(value, str):
+        status = value.strip()
+        status = LEGACY_STATUS_MAP.get(status, status)
+
+        if status in PROJECT_STATUSES:
+            return status
+
+    return "upcoming"
+
+
+def _normalize_beneficiary_target(value: Any) -> str:
+    if isinstance(value, str):
+        return value.strip()
+
+    if isinstance(value, (int, float)) and math.isfinite(value):
+        return str(int(value)) if float(value).is_integer() else str(value)
+
+    return ""
+
+
+def _parse_google_maps_position(value: Any) -> tuple[float, float] | None:
+    if not isinstance(value, str):
+        return None
+
+    patterns = [
+        r"@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)",
+        r"[?&]q=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)",
+        r"[?&]query=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)",
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, value)
+
+        if not match:
+            continue
+
+        lat = float(match.group(1))
+        lng = float(match.group(2))
+
+        if math.isfinite(lat) and math.isfinite(lng):
+            return (lat, lng)
+
+    return None
 
 
 def to_sql_datetime(value: Any) -> str | None:
@@ -177,10 +229,14 @@ def normalize_project_payload(input_data: Any) -> dict[str, Any]:
     address = location.get("address")
     place_id = location.get("placeId")
     maps_url = location.get("mapsUrl")
+    parsed_position = _parse_google_maps_position(maps_url)
     schedule = payload.get("schedule")
+    schedule_end = payload.get("scheduleEnd")
     beneficiary_target = payload.get("beneficiaryTarget")
     status_note = payload.get("statusNote")
     created_at = payload.get("createdAt")
+    lat = float(location.get("lat")) if _is_finite_number(location.get("lat")) else parsed_position[0] if parsed_position else None
+    lng = float(location.get("lng")) if _is_finite_number(location.get("lng")) else parsed_position[1] if parsed_position else None
 
     return {
         "id": normalized_id,
@@ -190,15 +246,16 @@ def normalize_project_payload(input_data: Any) -> dict[str, Any]:
         "location": {
             "address": address.strip() if isinstance(address, str) else "",
             "placeId": place_id.strip() if isinstance(place_id, str) and place_id.strip() else None,
-            "lat": float(location.get("lat")) if _is_finite_number(location.get("lat")) else None,
-            "lng": float(location.get("lng")) if _is_finite_number(location.get("lng")) else None,
+            "lat": lat,
+            "lng": lng,
             "mapsUrl": maps_url.strip() if isinstance(maps_url, str) else "",
         },
         "schedule": schedule if isinstance(schedule, str) else "",
-        "beneficiaryTarget": int(beneficiary_target) if _is_finite_number(beneficiary_target) else 0,
+        "scheduleEnd": schedule_end if isinstance(schedule_end, str) else "",
+        "beneficiaryTarget": _normalize_beneficiary_target(beneficiary_target),
         "dependencies": _normalize_dependencies(payload.get("dependencies")),
         "publishState": "published" if payload.get("publishState") == "published" else "draft",
-        "status": payload.get("status") if payload.get("status") in PROJECT_STATUSES else "upcoming",
+        "status": _normalize_status(payload.get("status")),
         "statusNote": status_note.strip() if isinstance(status_note, str) else "",
         "createdAt": created_at if isinstance(created_at, str) and created_at else now,
         "updatedAt": now,
@@ -233,9 +290,10 @@ def ensure_schema() -> None:
                   lng DECIMAL(10,7) NULL,
                   maps_url VARCHAR(500) NULL,
                   schedule_at DATETIME NULL,
-                  beneficiary_target INT UNSIGNED NOT NULL,
+                  schedule_end_at DATETIME NULL,
+                  beneficiary_target VARCHAR(120) NOT NULL DEFAULT '',
                   publish_state ENUM('draft', 'published') NOT NULL DEFAULT 'draft',
-                  status ENUM('upcoming', 'ongoing', 'moved', 'cancelled') NOT NULL DEFAULT 'upcoming',
+                  status ENUM('upcoming', 'active', 'archived') NOT NULL DEFAULT 'upcoming',
                   status_note TEXT NULL,
                   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -296,6 +354,33 @@ def ensure_schema() -> None:
                 """
             )
             cursor.execute("ALTER TABLE projects MODIFY schedule_at DATETIME NULL")
+            cursor.execute(
+                """
+                SELECT COUNT(*)
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = %s
+                  AND TABLE_NAME = 'projects'
+                  AND COLUMN_NAME = 'schedule_end_at'
+                """,
+                [DB_NAME],
+            )
+            schedule_end_column_exists = cursor.fetchone()[0] > 0
+
+            if not schedule_end_column_exists:
+                cursor.execute("ALTER TABLE projects ADD COLUMN schedule_end_at DATETIME NULL AFTER schedule_at")
+
+            cursor.execute("ALTER TABLE projects MODIFY beneficiary_target VARCHAR(120) NOT NULL DEFAULT ''")
+            cursor.execute(
+                "ALTER TABLE projects MODIFY status "
+                "ENUM('upcoming', 'ongoing', 'moved', 'cancelled', 'active', 'archived') "
+                "NOT NULL DEFAULT 'upcoming'"
+            )
+            cursor.execute("UPDATE projects SET status = 'active' WHERE status = 'ongoing'")
+            cursor.execute("UPDATE projects SET status = 'archived' WHERE status IN ('moved', 'cancelled')")
+            cursor.execute(
+                "ALTER TABLE projects MODIFY status "
+                "ENUM('upcoming', 'active', 'archived') NOT NULL DEFAULT 'upcoming'"
+            )
         connection.commit()
     finally:
         connection.close()
@@ -365,6 +450,7 @@ def list_projects(*, published_only: bool = False, project_ids: list[str] | None
                   lng,
                   maps_url,
                   schedule_at,
+                  schedule_end_at,
                   beneficiary_target,
                   publish_state,
                   status,
@@ -373,7 +459,7 @@ def list_projects(*, published_only: bool = False, project_ids: list[str] | None
                   updated_at
                 FROM projects
                 {where_sql}
-                ORDER BY schedule_at IS NULL, schedule_at ASC, name ASC
+                ORDER BY schedule_at IS NULL, schedule_at ASC, schedule_end_at ASC, name ASC
                 """,
                 params,
             )
@@ -442,7 +528,13 @@ def list_projects(*, published_only: bool = False, project_ids: list[str] | None
         if row.get("lng") is not None:
             location["lng"] = _decimal_to_float(row["lng"])
 
-        status = row.get("status") if row.get("status") in PROJECT_STATUSES else "upcoming"
+        if "lat" not in location or "lng" not in location:
+            parsed_position = _parse_google_maps_position(row.get("maps_url"))
+
+            if parsed_position:
+                location["lat"], location["lng"] = parsed_position
+
+        status = _normalize_status(row.get("status"))
 
         projects.append(
             {
@@ -452,7 +544,8 @@ def list_projects(*, published_only: bool = False, project_ids: list[str] | None
                 "eligibility": eligibility_by_project.get(row_id, []),
                 "location": location,
                 "schedule": to_ui_datetime(row.get("schedule_at")),
-                "beneficiaryTarget": int(row.get("beneficiary_target") or 0),
+                "scheduleEnd": to_ui_datetime(row.get("schedule_end_at")),
+                "beneficiaryTarget": str(row.get("beneficiary_target") or ""),
                 "dependencies": dependencies_by_project.get(row_id, []),
                 "publishState": "published" if row.get("publish_state") == "published" else "draft",
                 "status": status,
@@ -483,6 +576,7 @@ def save_project(project_payload: Any) -> dict[str, Any]:
                   lng,
                   maps_url,
                   schedule_at,
+                  schedule_end_at,
                   beneficiary_target,
                   publish_state,
                   status,
@@ -490,7 +584,7 @@ def save_project(project_payload: Any) -> dict[str, Any]:
                   created_at,
                   updated_at
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
                 ON DUPLICATE KEY UPDATE
                   name = VALUES(name),
                   address = VALUES(address),
@@ -499,6 +593,7 @@ def save_project(project_payload: Any) -> dict[str, Any]:
                   lng = VALUES(lng),
                   maps_url = VALUES(maps_url),
                   schedule_at = VALUES(schedule_at),
+                  schedule_end_at = VALUES(schedule_end_at),
                   beneficiary_target = VALUES(beneficiary_target),
                   publish_state = VALUES(publish_state),
                   status = VALUES(status),
@@ -514,6 +609,7 @@ def save_project(project_payload: Any) -> dict[str, Any]:
                     project["location"]["lng"],
                     project["location"]["mapsUrl"],
                     to_sql_datetime(project["schedule"]),
+                    to_sql_datetime(project["scheduleEnd"]),
                     project["beneficiaryTarget"],
                     project["publishState"],
                     project["status"],

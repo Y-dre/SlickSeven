@@ -24,7 +24,8 @@ function createProject(overrides: Partial<AyudaProject> = {}): AyudaProject {
       mapsUrl: "",
     },
     schedule: "2026-05-01T09:00",
-    beneficiaryTarget: 100,
+    scheduleEnd: "2026-05-01T12:00",
+    beneficiaryTarget: "Senior Citizen",
     dependencies: [
       {
         id: "dep-1",
@@ -65,7 +66,8 @@ describe("project helpers", () => {
       eligibility: ["Resident of the barangay"],
       location: { address: "Municipal Hall" },
       schedule: "2026-05-01T09:00",
-      beneficiaryTarget: 100,
+      scheduleEnd: "2026-05-01T12:00",
+      beneficiaryTarget: "Senior Citizen",
     };
 
     expect(validateProjectForPublish(valid).isValid).toBe(true);
