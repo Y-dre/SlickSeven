@@ -13,6 +13,7 @@ import {
   XCircle,
 } from "lucide-react";
 import React, { useEffect, useMemo, useState } from "react";
+import kaAyudaLogo from "./assets/ka-ayuda-logo.png";
 import { loadPublishedProjects } from "./lib/projects";
 import { createGoogleMapsEmbedUrl, createGoogleMapsUrl, hasCoordinates } from "./lib/maps";
 import {
@@ -409,9 +410,12 @@ function UserApp() {
   return (
     <div className="app user-app">
       <header className="topbar">
-        <div>
-          <p className="eyebrow">User Portal</p>
-          <h1>Ayuda Announcements</h1>
+        <div className="brand-block">
+          <img alt="Ka'Ayuda logo" className="brand-logo" src={kaAyudaLogo} />
+          <div>
+            <p className="eyebrow">User Portal</p>
+            <h1>Ka'Ayuda Announcements</h1>
+          </div>
         </div>
         <div className="topbar-actions">
           <Metric label="Active" value={activeProjects} />
@@ -422,7 +426,7 @@ function UserApp() {
       {loadError ? <div className="message error">{loadError}</div> : null}
 
       <main className="user-workspace">
-        <aside className="project-panel user-list-panel" aria-label="Published ayuda projects">
+        <aside className="project-panel user-list-panel" aria-label="Published Ka'Ayuda projects">
           <div className="panel-heading">
             <div>
               <p className="eyebrow">Browse</p>

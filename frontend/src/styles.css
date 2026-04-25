@@ -60,6 +60,26 @@ button:disabled {
   z-index: 5;
 }
 
+.brand-block {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+}
+
+.brand-logo {
+  border-radius: 8px;
+  display: block;
+  flex: 0 0 auto;
+  height: 52px;
+  object-fit: contain;
+  width: 52px;
+}
+
+.login-brand {
+  margin-bottom: 10px;
+}
+
 .topbar h1,
 .editor-title h2,
 .panel-heading h2,
@@ -992,6 +1012,11 @@ button:disabled {
   .topbar-actions,
   .editor-actions {
     justify-content: flex-start;
+  }
+
+  .brand-logo {
+    height: 46px;
+    width: 46px;
   }
 
   .workspace,

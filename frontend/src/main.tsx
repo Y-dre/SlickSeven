@@ -11,7 +11,7 @@ const isUserSide =
   window.location.pathname.startsWith("/user") ||
   searchParams.get("side") === "user";
 
-document.title = isUserSide ? "Ayuda User" : "Ayuda Admin";
+document.title = isUserSide ? "Ka'Ayuda User" : "Ka'Ayuda Admin";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

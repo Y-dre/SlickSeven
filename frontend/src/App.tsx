@@ -16,6 +16,7 @@ import {
   Users,
 } from "lucide-react";
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import kaAyudaLogo from "./assets/ka-ayuda-logo.png";
 import {
   createDependency,
   createEmptyProject,
@@ -341,7 +342,7 @@ function App() {
         publishState: "published",
         status: normalized.status || "upcoming",
       },
-      "Ayuda announcement published.",
+      "Ka'Ayuda announcement published.",
     );
   }
 
@@ -416,9 +417,12 @@ function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <div>
-          <p className="eyebrow">Admin Console</p>
-          <h1>Ayuda Project Manager</h1>
+        <div className="brand-block">
+          <img alt="Ka'Ayuda logo" className="brand-logo" src={kaAyudaLogo} />
+          <div>
+            <p className="eyebrow">Admin Console</p>
+            <h1>Ka'Ayuda Project Manager</h1>
+          </div>
         </div>
         <div className="topbar-actions">
           <Metric label="Active" value={activeProjects} />
@@ -432,7 +436,7 @@ function App() {
       </header>
 
       <main className="workspace">
-        <aside className="project-panel" aria-label="Ayuda projects">
+        <aside className="project-panel" aria-label="Ka'Ayuda projects">
           <div className="panel-heading">
             <div>
               <p className="eyebrow">Announcements</p>
@@ -532,7 +536,7 @@ function App() {
           <div className="editor-title">
             <div>
               <p className="eyebrow">{draftIsSaved ? "Editing Project" : "New Project"}</p>
-              <h2>{draft.name || "Untitled Ayuda"}</h2>
+              <h2>{draft.name || "Untitled Ka'Ayuda"}</h2>
             </div>
             <div className="editor-actions">
               {draftIsSaved ? (
@@ -816,9 +820,12 @@ function LoginView({ onLogin }: LoginViewProps) {
   return (
     <main className="login-screen">
       <form className="login-panel" onSubmit={handleSubmit}>
-        <div>
-          <p className="eyebrow">Ayuda Admin</p>
-          <h1>Sign in</h1>
+        <div className="brand-block login-brand">
+          <img alt="Ka'Ayuda logo" className="brand-logo" src={kaAyudaLogo} />
+          <div>
+            <p className="eyebrow">Ka'Ayuda Admin</p>
+            <h1>Sign in</h1>
+          </div>
         </div>
         <label className="field">
           <span>Username</span>
