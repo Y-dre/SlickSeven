@@ -1,6 +1,6 @@
-# Ayuda Tracker MVP
+# Ka'Ayuda Tracker MVP
 
-Ayuda Tracker is a simple two-side web app for managing ayuda announcements.
+Ka'Ayuda Tracker is a simple two-side web app for managing ayuda announcements.
 It has an admin side for encoding and publishing projects, and a user side for browsing active announcements, checking schedules, and viewing location details.
 
 ## Overview
