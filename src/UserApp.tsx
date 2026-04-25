@@ -16,7 +16,19 @@ import { loadPublishedProjects } from "./lib/projects";
 import { createGoogleMapsEmbedUrl } from "./lib/maps";
 import type { AyudaProject, ProjectStatus } from "./types";
 
-type PublishedStatusFilter = Extract<ProjectStatus, "upcoming" | "active">;
+type PublishedStatusFilter = "all" | Extract<ProjectStatus, "upcoming" | "active">;
+type CityFilter = "all" | string;
+type BeneficiaryFilter = "all" | string;
+
+interface CityFilterOption {
+  label: string;
+  value: string;
+}
+
+interface BeneficiaryFilterOption {
+  label: string;
+  value: string;
+}
 
 const statusLabels: Record<ProjectStatus, string> = {
   upcoming: "Upcoming",
@@ -134,13 +146,30 @@ function formatScheduleTimeframe(startValue: string, endValue: string): string {
   return `${formatter.format(start)} - ${formatter.format(end)}`;
 }
 
+function createDescriptionPreview(value: string, maxLength = 180): string {
+  const normalized = value.trim();
+
+  if (!normalized) {
+    return "";
+  }
+
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, maxLength).trimEnd()}...`;
+}
+
 function UserApp() {
   const [projects, setProjects] = useState<AyudaProject[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<PublishedStatusFilter>("upcoming");
+  const [statusFilter, setStatusFilter] = useState<PublishedStatusFilter>("all");
+  const [cityFilter, setCityFilter] = useState<CityFilter>("all");
+  const [beneficiaryFilter, setBeneficiaryFilter] = useState<BeneficiaryFilter>("all");
   const [eligibilityAnswers, setEligibilityAnswers] = useState<Record<string, Record<number, boolean>>>({});
   const [documentChecks, setDocumentChecks] = useState<Record<string, Record<number, boolean>>>({});
+  const [descriptionDialogProject, setDescriptionDialogProject] = useState<AyudaProject | null>(null);
   const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
@@ -160,6 +189,100 @@ function UserApp() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!descriptionDialogProject) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setDescriptionDialogProject(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [descriptionDialogProject]);
+
+  const cityFilterOptions = useMemo<CityFilterOption[]>(() => {
+    const cityMap = new Map<string, string>();
+
+    for (const project of projects) {
+      if (project.status !== "upcoming" && project.status !== "active") {
+        continue;
+      }
+
+      const city = (project.location.city ?? "").trim();
+
+      if (!city) {
+        continue;
+      }
+
+      const key = city.toLowerCase();
+
+      if (!cityMap.has(key)) {
+        cityMap.set(key, city);
+      }
+    }
+
+    return [...cityMap.entries()]
+      .map(([value, label]) => ({ value, label }))
+      .sort((first, second) => first.label.localeCompare(second.label, "en", { sensitivity: "base" }));
+  }, [projects]);
+
+  const beneficiaryFilterOptions = useMemo<BeneficiaryFilterOption[]>(() => {
+    const beneficiaryMap = new Map<string, string>();
+
+    for (const project of projects) {
+      if (project.status !== "upcoming" && project.status !== "active") {
+        continue;
+      }
+
+      const beneficiary = project.beneficiaryTarget.trim();
+
+      if (!beneficiary) {
+        continue;
+      }
+
+      const key = beneficiary.toLowerCase();
+
+      if (!beneficiaryMap.has(key)) {
+        beneficiaryMap.set(key, beneficiary);
+      }
+    }
+
+    return [...beneficiaryMap.entries()]
+      .map(([value, label]) => ({ value, label }))
+      .sort((first, second) => first.label.localeCompare(second.label, "en", { sensitivity: "base" }));
+  }, [projects]);
+
+  useEffect(() => {
+    if (cityFilter === "all") {
+      return;
+    }
+
+    const hasOption = cityFilterOptions.some((option) => option.value === cityFilter);
+
+    if (!hasOption) {
+      setCityFilter("all");
+    }
+  }, [cityFilter, cityFilterOptions]);
+
+  useEffect(() => {
+    if (beneficiaryFilter === "all") {
+      return;
+    }
+
+    const hasOption = beneficiaryFilterOptions.some((option) => option.value === beneficiaryFilter);
+
+    if (!hasOption) {
+      setBeneficiaryFilter("all");
+    }
+  }, [beneficiaryFilter, beneficiaryFilterOptions]);
+
   const filteredProjects = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
 
@@ -167,14 +290,20 @@ function UserApp() {
       const matchesQuery =
         !normalizedQuery ||
         project.name.toLowerCase().includes(normalizedQuery) ||
+        project.description.toLowerCase().includes(normalizedQuery) ||
         project.location.address.toLowerCase().includes(normalizedQuery) ||
+        (project.location.city ?? "").toLowerCase().includes(normalizedQuery) ||
         project.requirements.some((requirement) => requirement.toLowerCase().includes(normalizedQuery)) ||
         project.eligibility.some((rule) => rule.toLowerCase().includes(normalizedQuery));
-      const matchesStatus = project.status === statusFilter;
+      const matchesStatus =
+        statusFilter === "all" ? project.status === "upcoming" || project.status === "active" : project.status === statusFilter;
+      const matchesCity = cityFilter === "all" || (project.location.city ?? "").trim().toLowerCase() === cityFilter;
+      const matchesBeneficiary =
+        beneficiaryFilter === "all" || project.beneficiaryTarget.trim().toLowerCase() === beneficiaryFilter;
 
-      return matchesQuery && matchesStatus;
+      return matchesQuery && matchesStatus && matchesCity && matchesBeneficiary;
     });
-  }, [projects, query, statusFilter]);
+  }, [projects, query, statusFilter, cityFilter, beneficiaryFilter]);
 
   const selectedProject = useMemo(() => {
     return filteredProjects.find((project) => project.id === selectedProjectId) ?? filteredProjects[0] ?? null;
@@ -247,14 +376,35 @@ function UserApp() {
             />
           </label>
 
-          <div className="filters single" aria-label="Published ayuda filters">
+          <div className="filters" aria-label="Published ayuda filters">
             <select
               aria-label="Published ayuda status"
               onChange={(event) => setStatusFilter(event.target.value as PublishedStatusFilter)}
               value={statusFilter}
             >
+              <option value="all">All</option>
               <option value="upcoming">Upcoming</option>
               <option value="active">Active</option>
+            </select>
+            <select aria-label="Published ayuda city" onChange={(event) => setCityFilter(event.target.value)} value={cityFilter}>
+              <option value="all">All Cities</option>
+              {cityFilterOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="Published ayuda beneficiary"
+              onChange={(event) => setBeneficiaryFilter(event.target.value)}
+              value={beneficiaryFilter}
+            >
+              <option value="all">All Beneficiaries</option>
+              {beneficiaryFilterOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -280,6 +430,7 @@ function UserApp() {
                       <span>
                         <MapPin aria-hidden="true" size={14} />
                         {project.location.address || "No venue"}
+                        {project.location.city ? `, ${project.location.city}` : ""}
                       </span>
                       <span>
                         <CalendarClock aria-hidden="true" size={14} />
@@ -303,6 +454,7 @@ function UserApp() {
               eligibilityAnswers={eligibilityAnswers[selectedProject.id] ?? {}}
               onDocumentCheck={(index, value) => updateDocumentCheck(selectedProject.id, index, value)}
               onEligibilityCheck={(index, value) => updateEligibility(selectedProject.id, index, value)}
+              onViewDescription={() => setDescriptionDialogProject(selectedProject)}
               project={selectedProject}
             />
           ) : (
@@ -313,6 +465,8 @@ function UserApp() {
           )}
         </section>
       </main>
+
+      <DescriptionDialog onClose={() => setDescriptionDialogProject(null)} project={descriptionDialogProject} />
     </div>
   );
 }
@@ -336,6 +490,7 @@ interface AyudaDetailsProps {
   eligibilityAnswers: Record<number, boolean>;
   onDocumentCheck: (index: number, value: boolean) => void;
   onEligibilityCheck: (index: number, value: boolean) => void;
+  onViewDescription: () => void;
   project: AyudaProject;
 }
 
@@ -344,6 +499,7 @@ function AyudaDetails({
   eligibilityAnswers,
   onDocumentCheck,
   onEligibilityCheck,
+  onViewDescription,
   project,
 }: AyudaDetailsProps) {
   const eligibilityTouched = Object.keys(eligibilityAnswers).length > 0;
@@ -352,6 +508,7 @@ function AyudaDetails({
   const documentsReady =
     project.requirements.length > 0 && project.requirements.every((_, index) => documentChecks[index] === true);
   const embedUrl = createGoogleMapsEmbedUrl(project.location);
+  const description = project.description.trim();
 
   return (
     <>
@@ -417,6 +574,17 @@ function AyudaDetails({
               )}
             </div>
           </div>
+        </section>
+
+        <section className="detail-section wide">
+          <div className="section-heading">
+            <FileText aria-hidden="true" size={18} />
+            <h3>Description</h3>
+          </div>
+          <p className="muted-text">{createDescriptionPreview(description) || "No description posted yet."}</p>
+          <button className="button secondary" disabled={!description} onClick={onViewDescription} type="button">
+            View Description
+          </button>
         </section>
 
         <section className="detail-section">
@@ -521,6 +689,31 @@ function EligibilityResult({ eligible, touched }: EligibilityResultProps) {
     <div className="readiness-summary blocked">
       <XCircle aria-hidden="true" size={18} />
       Not eligible.
+    </div>
+  );
+}
+
+interface DescriptionDialogProps {
+  onClose: () => void;
+  project: AyudaProject | null;
+}
+
+function DescriptionDialog({ onClose, project }: DescriptionDialogProps) {
+  if (!project) {
+    return null;
+  }
+
+  return (
+    <div aria-modal="true" className="modal-backdrop" onClick={onClose} role="dialog">
+      <div className="modal-card" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-header">
+          <h3>{project.name}</h3>
+          <button className="button ghost" onClick={onClose} type="button">
+            Close
+          </button>
+        </div>
+        <p className="muted-text">{project.description.trim() || "No description posted yet."}</p>
+      </div>
     </div>
   );
 }

@@ -7,6 +7,7 @@ MVP for creating, publishing, browsing, and tracking ayuda announcements.
 - Python 3.11+
 - Flask API
 - React frontend served as static files by Flask
+- Vite frontend build pipeline
 - Local MySQL database through XAMPP
 
 ## Local Setup
@@ -15,6 +16,12 @@ Install Python dependencies:
 
 ```bash
 python -m pip install -r requirements.txt
+```
+
+Install frontend dependencies:
+
+```bash
+npm install
 ```
 
 Create a `.env` file with your XAMPP/MySQL values:
@@ -32,6 +39,12 @@ Populate full-feature mock database records:
 
 ```bash
 python -m server.seed
+```
+
+Build frontend assets into `dist/`:
+
+```bash
+npm run build
 ```
 
 Run database verification checks:
@@ -57,3 +70,8 @@ Default mock credentials:
 
 - Username: `admin`
 - Password: `admin123`
+
+## Notes
+
+- The backend runtime is Flask only.
+- The old Express/Node backend path has been removed to avoid dual-server conflicts.

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   PROJECTS_API_PATH,
   createEmptyProject,
+  deleteProject,
   loadProjects,
   loadPublishedProjects,
   saveProject,
@@ -21,6 +22,10 @@ function createProject(overrides: Partial<AyudaProject> = {}): AyudaProject {
     eligibility: ["Barangay resident"],
     location: {
       address: "Municipal Hall",
+      city: "",
+      placeId: undefined,
+      lat: undefined,
+      lng: undefined,
       mapsUrl: "",
     },
     schedule: "2026-05-01T09:00",
@@ -107,7 +112,17 @@ describe("project helpers", () => {
   });
 
   it("posts a single project to store it", async () => {
-    const project = createProject();
+    const project = createProject({
+      description: " Assistance details for residents. ",
+      location: {
+        address: "Municipal Hall",
+        city: " Manila ",
+        placeId: undefined,
+        lat: undefined,
+        lng: undefined,
+        mapsUrl: "",
+      },
+    });
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(project));
 
     const saved = await saveProject(project, fetchMock as unknown as typeof fetch);
@@ -119,9 +134,19 @@ describe("project helpers", () => {
     expect(JSON.parse(init.body as string)).toMatchObject({
       id: project.id,
       name: project.name,
+      description: "Assistance details for residents.",
+      location: expect.objectContaining({
+        city: "Manila",
+      }),
       publishState: project.publishState,
     });
-    expect(saved).toEqual(project);
+    expect(saved).toMatchObject({
+      ...project,
+      description: "Assistance details for residents.",
+      location: expect.objectContaining({
+        city: "Manila",
+      }),
+    });
   });
 
   it("stores multiple projects by posting each one", async () => {
@@ -136,6 +161,17 @@ describe("project helpers", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(saved).toEqual([first, second]);
+  });
+
+  it("deletes a project entry through the API", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ deleted: true }));
+
+    await deleteProject("ayuda-test-1", fetchMock as unknown as typeof fetch);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${PROJECTS_API_PATH}/ayuda-test-1`,
+      expect.objectContaining({ method: "DELETE" }),
+    );
   });
 
   it("throws when API responds with an error", async () => {
