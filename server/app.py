@@ -6,7 +6,7 @@ from flask import Flask, jsonify, request, send_from_directory
 from werkzeug.exceptions import HTTPException
 
 from .config import API_PORT
-from .db import ensure_schema, list_projects, save_project
+from .db import delete_project, ensure_schema, list_projects, save_project
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DIST_DIR = BASE_DIR / "dist"
@@ -39,6 +39,20 @@ def create_app() -> Flask:
     def post_project():
         payload = request.get_json(silent=True) or {}
         return jsonify(save_project(payload))
+
+    @app.delete("/api/projects/<project_id>")
+    def delete_project_by_id(project_id: str):
+        deleted = delete_project(project_id)
+        return jsonify({"deleted": deleted})
+
+    @app.after_request
+    def disable_api_cache(response):
+        if request.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+
+        return response
 
     @app.get("/assets/<path:filename>")
     def frontend_assets(filename: str):

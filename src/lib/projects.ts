@@ -30,12 +30,29 @@ function isNumericOnly(value: string): boolean {
   return /^\d+(\.\d+)?$/.test(value.trim());
 }
 
+function isValidCoordinate(latitude: unknown, longitude: unknown): boolean {
+  return (
+    typeof latitude === "number" &&
+    Number.isFinite(latitude) &&
+    latitude >= -90 &&
+    latitude <= 90 &&
+    typeof longitude === "number" &&
+    Number.isFinite(longitude) &&
+    longitude >= -180 &&
+    longitude <= 180
+  );
+}
+
 function normalizeProject(project: AyudaProject): AyudaProject {
   const mapPosition = parseGoogleMapsPosition(project.location?.mapsUrl);
+  const hasValidStoredCoordinates = isValidCoordinate(project.location?.lat, project.location?.lng);
+  const normalizedLat = hasValidStoredCoordinates ? project.location?.lat : mapPosition?.lat;
+  const normalizedLng = hasValidStoredCoordinates ? project.location?.lng : mapPosition?.lng;
 
   return {
     ...project,
     name: typeof project.name === "string" ? project.name : "",
+    description: typeof project.description === "string" ? project.description.trim() : "",
     requirements: Array.isArray(project.requirements)
       ? project.requirements.filter((item): item is string => typeof item === "string")
       : [],
@@ -44,9 +61,10 @@ function normalizeProject(project: AyudaProject): AyudaProject {
       : [],
     location: {
       address: project.location?.address ?? "",
+      city: typeof project.location?.city === "string" ? project.location.city.trim() : "",
       placeId: project.location?.placeId,
-      lat: project.location?.lat ?? mapPosition?.lat,
-      lng: project.location?.lng ?? mapPosition?.lng,
+      lat: normalizedLat,
+      lng: normalizedLng,
       mapsUrl: project.location?.mapsUrl ?? "",
     },
     schedule: project.schedule ?? "",
@@ -91,10 +109,12 @@ export function createEmptyProject(): AyudaProject {
   return {
     id: createId("ayuda"),
     name: "",
+    description: "",
     requirements: [],
     eligibility: [],
     location: {
       address: "",
+      city: "",
       mapsUrl: "",
     },
     schedule: "",
@@ -168,10 +188,12 @@ async function requestProjects<T>(
   options: RequestInit,
   fetchFn: typeof fetch = fetch,
 ): Promise<T> {
+  const method = typeof options.method === "string" ? options.method.toUpperCase() : "GET";
   const response = await fetchFn(path, {
     headers: {
       "Content-Type": "application/json",
     },
+    cache: method === "GET" ? "no-store" : options.cache,
     ...options,
   });
 
@@ -203,6 +225,14 @@ export async function saveProject(project: AyudaProject, fetchFn: typeof fetch =
   );
 
   return normalizeProject(saved);
+}
+
+export async function deleteProject(projectId: string, fetchFn: typeof fetch = fetch): Promise<void> {
+  await requestProjects<{ deleted: boolean }>(
+    `${PROJECTS_API_PATH}/${encodeURIComponent(projectId)}`,
+    { method: "DELETE" },
+    fetchFn,
+  );
 }
 
 export async function saveProjects(

@@ -4,6 +4,7 @@ export type ProjectStatus = "upcoming" | "active" | "archived";
 
 export interface Location {
   address: string;
+  city?: string;
   placeId?: string;
   lat?: number;
   lng?: number;
@@ -19,6 +20,7 @@ export interface DependencyItem {
 export interface AyudaProject {
   id: string;
   name: string;
+  description: string;
   requirements: string[];
   eligibility: string[];
   location: Location;

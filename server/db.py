@@ -227,11 +227,13 @@ def normalize_project_payload(input_data: Any) -> dict[str, Any]:
 
     name = payload.get("name")
     address = location.get("address")
+    city = location.get("city")
     place_id = location.get("placeId")
     maps_url = location.get("mapsUrl")
     parsed_position = _parse_google_maps_position(maps_url)
     schedule = payload.get("schedule")
     schedule_end = payload.get("scheduleEnd")
+    description = payload.get("description")
     beneficiary_target = payload.get("beneficiaryTarget")
     status_note = payload.get("statusNote")
     created_at = payload.get("createdAt")
@@ -241,10 +243,12 @@ def normalize_project_payload(input_data: Any) -> dict[str, Any]:
     return {
         "id": normalized_id,
         "name": name.strip() if isinstance(name, str) else "",
+        "description": description.strip() if isinstance(description, str) else "",
         "requirements": _normalize_list(payload.get("requirements")),
         "eligibility": _normalize_list(payload.get("eligibility")),
         "location": {
             "address": address.strip() if isinstance(address, str) else "",
+            "city": city.strip() if isinstance(city, str) else "",
             "placeId": place_id.strip() if isinstance(place_id, str) and place_id.strip() else None,
             "lat": lat,
             "lng": lng,
@@ -284,7 +288,9 @@ def ensure_schema() -> None:
                 CREATE TABLE IF NOT EXISTS projects (
                   id VARCHAR(80) NOT NULL,
                   name VARCHAR(255) NOT NULL,
+                  description TEXT NULL,
                   address VARCHAR(500) NOT NULL,
+                  city VARCHAR(120) NOT NULL DEFAULT '',
                   place_id VARCHAR(255) NULL,
                   lat DECIMAL(10,7) NULL,
                   lng DECIMAL(10,7) NULL,
@@ -300,7 +306,8 @@ def ensure_schema() -> None:
                   PRIMARY KEY (id),
                   KEY idx_projects_schedule_at (schedule_at),
                   KEY idx_projects_publish_state (publish_state),
-                  KEY idx_projects_status (status)
+                  KEY idx_projects_status (status),
+                  KEY idx_projects_city (city)
                 ) ENGINE=InnoDB
                 """
             )
@@ -360,6 +367,36 @@ def ensure_schema() -> None:
                 FROM INFORMATION_SCHEMA.COLUMNS
                 WHERE TABLE_SCHEMA = %s
                   AND TABLE_NAME = 'projects'
+                  AND COLUMN_NAME = 'description'
+                """,
+                [DB_NAME],
+            )
+            description_column_exists = cursor.fetchone()[0] > 0
+
+            if not description_column_exists:
+                cursor.execute("ALTER TABLE projects ADD COLUMN description TEXT NULL AFTER name")
+
+            cursor.execute(
+                """
+                SELECT COUNT(*)
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = %s
+                  AND TABLE_NAME = 'projects'
+                  AND COLUMN_NAME = 'city'
+                """,
+                [DB_NAME],
+            )
+            city_column_exists = cursor.fetchone()[0] > 0
+
+            if not city_column_exists:
+                cursor.execute("ALTER TABLE projects ADD COLUMN city VARCHAR(120) NOT NULL DEFAULT '' AFTER address")
+
+            cursor.execute(
+                """
+                SELECT COUNT(*)
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = %s
+                  AND TABLE_NAME = 'projects'
                   AND COLUMN_NAME = 'schedule_end_at'
                 """,
                 [DB_NAME],
@@ -369,6 +406,7 @@ def ensure_schema() -> None:
             if not schedule_end_column_exists:
                 cursor.execute("ALTER TABLE projects ADD COLUMN schedule_end_at DATETIME NULL AFTER schedule_at")
 
+            cursor.execute("ALTER TABLE projects MODIFY city VARCHAR(120) NOT NULL DEFAULT ''")
             cursor.execute("ALTER TABLE projects MODIFY beneficiary_target VARCHAR(120) NOT NULL DEFAULT ''")
             cursor.execute(
                 "ALTER TABLE projects MODIFY status "
@@ -444,7 +482,9 @@ def list_projects(*, published_only: bool = False, project_ids: list[str] | None
                 SELECT
                   id,
                   name,
+                  description,
                   address,
+                  city,
                   place_id,
                   lat,
                   lng,
@@ -516,6 +556,7 @@ def list_projects(*, published_only: bool = False, project_ids: list[str] | None
         row_id = str(row["id"])
         location: dict[str, Any] = {
             "address": str(row.get("address") or ""),
+            "city": str(row.get("city") or ""),
             "mapsUrl": str(row.get("maps_url") or ""),
         }
 
@@ -540,6 +581,7 @@ def list_projects(*, published_only: bool = False, project_ids: list[str] | None
             {
                 "id": row_id,
                 "name": str(row.get("name") or ""),
+                "description": str(row.get("description") or ""),
                 "requirements": requirements_by_project.get(row_id, []),
                 "eligibility": eligibility_by_project.get(row_id, []),
                 "location": location,
@@ -558,6 +600,25 @@ def list_projects(*, published_only: bool = False, project_ids: list[str] | None
     return projects
 
 
+def delete_project(project_id: Any) -> bool:
+    normalized_project_id = project_id.strip() if isinstance(project_id, str) else ""
+
+    if not normalized_project_id:
+        return False
+
+    connection = get_connection()
+
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("DELETE FROM projects WHERE id = %s", [normalized_project_id])
+            deleted_count = cursor.rowcount
+        connection.commit()
+    finally:
+        connection.close()
+
+    return deleted_count > 0
+
+
 def save_project(project_payload: Any) -> dict[str, Any]:
     project = normalize_project_payload(project_payload)
     connection = get_connection()
@@ -570,7 +631,9 @@ def save_project(project_payload: Any) -> dict[str, Any]:
                 INSERT INTO projects (
                   id,
                   name,
+                  description,
                   address,
+                  city,
                   place_id,
                   lat,
                   lng,
@@ -584,10 +647,12 @@ def save_project(project_payload: Any) -> dict[str, Any]:
                   created_at,
                   updated_at
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
                 ON DUPLICATE KEY UPDATE
                   name = VALUES(name),
+                  description = VALUES(description),
                   address = VALUES(address),
+                  city = VALUES(city),
                   place_id = VALUES(place_id),
                   lat = VALUES(lat),
                   lng = VALUES(lng),
@@ -603,7 +668,9 @@ def save_project(project_payload: Any) -> dict[str, Any]:
                 [
                     project["id"],
                     project["name"],
+                    project["description"],
                     project["location"]["address"],
+                    project["location"]["city"],
                     project["location"]["placeId"],
                     project["location"]["lat"],
                     project["location"]["lng"],
