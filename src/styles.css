@@ -493,9 +493,10 @@ button:disabled {
   justify-content: center;
   min-height: 220px;
   overflow: hidden;
+  position: relative;
 }
 
-.map-preview > div {
+.map-placeholder {
   align-items: center;
   color: var(--muted);
   display: grid;
@@ -506,10 +507,27 @@ button:disabled {
   text-align: center;
 }
 
-.map-preview iframe {
+.map-preview iframe,
+.map-canvas {
   border: 0;
   height: 100%;
   width: 100%;
+}
+
+.map-preview iframe {
+  inset: 0;
+  position: absolute;
+}
+
+.map-canvas {
+  inset: 0;
+  position: absolute;
+  visibility: hidden;
+  z-index: 1;
+}
+
+.map-canvas.is-visible {
+  visibility: visible;
 }
 
 .dependency-list {

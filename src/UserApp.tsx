@@ -410,7 +410,7 @@ function AyudaDetails({
                   title="Google Maps venue preview"
                 />
               ) : (
-                <div>
+                <div className="map-placeholder">
                   <MapPin aria-hidden="true" size={28} />
                   <span>{project.location.address || "No venue selected"}</span>
                 </div>
