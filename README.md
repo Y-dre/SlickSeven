@@ -8,7 +8,7 @@ It has an admin side for encoding and publishing projects, and a user side for b
 This project is built as a single deployable app:
 
 - A Flask backend provides API endpoints and serves static frontend files.
-- A React + TypeScript frontend contains two views:
+- A React + TypeScript frontend contains two views.
 - Admin view (`/`) for creating, editing, publishing, and archiving ayuda projects.
 - User view (`/user`) for searching/filtering published projects and viewing location/distance details.
 - MySQL stores project records, schedules, requirements, eligibility, location, dependencies, and publish state.
@@ -23,9 +23,12 @@ Core capabilities:
 
 ## Project Structure
 
-- `server/`: Flask app, DB access layer, schema setup, and seed/verification scripts.
-- `src/`: React UI, shared project logic, map/location helpers, and unit tests.
-- `dist/`: built frontend output served by Flask.
+- `backend/server/`: Flask app, DB access layer, schema setup, and seed/verification scripts.
+- `backend/requirements.txt`: Python dependencies.
+- `backend/.env.example`: sample backend environment variables.
+- `frontend/src/`: React UI, shared project logic, map/location helpers, and unit tests.
+- `frontend/dist/`: built frontend output served by Flask.
+- `frontend/package.json`: frontend scripts and dependencies.
 
 ## Tech Stack
 
@@ -34,21 +37,18 @@ Core capabilities:
 - Testing: Vitest (frontend utility/unit tests)
 - Database: MySQL (commonly run via XAMPP in local setup)
 
-## Local Setup
+## How To Run
 
-1. Install Python dependencies:
-
-```bash
-python -m pip install -r requirements.txt
-```
-
-2. Install frontend dependencies:
+### 1) Install dependencies
 
 ```bash
-npm install
+python -m pip install -r backend/requirements.txt
+npm install --prefix frontend
 ```
 
-3. Create `.env` in project root:
+### 2) Configure environment
+
+Create `backend/.env` (copy from `backend/.env.example`) with:
 
 ```bash
 API_PORT=3001
@@ -59,29 +59,37 @@ DB_PASSWORD=
 DB_NAME=ayuda
 ```
 
-4. Seed mock database records:
+Optional frontend env (`frontend/.env.local`) for Google Maps:
 
 ```bash
-python -m server.seed
+VITE_GOOGLE_MAPS_API_KEY=your_key_here
 ```
 
-5. Build frontend assets:
+### 3) Prepare database
+
+Make sure MySQL is running, then seed data:
 
 ```bash
-npm run build
+python -m backend.server.seed
 ```
 
-6. Optional DB verification checks:
+Optional verification:
 
 ```bash
-python -m server.verify_seed
-python -m server.verify_seed --repeat=25
+python -m backend.server.verify_seed
+python -m backend.server.verify_seed --repeat=25
 ```
 
-7. Run the app:
+### 4) Build frontend
 
 ```bash
-python -m server.app
+npm --prefix frontend run build
+```
+
+### 5) Start backend (serves API + built frontend)
+
+```bash
+python -m backend.server.app
 ```
 
 App URLs:
@@ -97,11 +105,12 @@ Default mock admin credentials:
 
 ## Development Commands
 
-- Frontend dev server (admin route): `npm run dev`
-- Frontend dev server (user route): `npm run dev:user`
-- Frontend tests: `npm test`
-- Frontend tests (single run): `npm run test:run`
-- Frontend production build: `npm run build`
+- Frontend dev server (admin): `npm --prefix frontend run dev`
+- Frontend dev server (user): `npm --prefix frontend run dev:user`
+- Frontend tests: `npm --prefix frontend test`
+- Frontend tests (single run): `npm --prefix frontend run test:run`
+- Frontend production build: `npm --prefix frontend run build`
+- Backend app: `python -m backend.server.app`
 
 ## Credits
 
@@ -132,4 +141,4 @@ External resources and APIs referenced:
 ## Notes
 
 - Backend runtime is Flask only.
-- Frontend assets are built into `dist/` and served by Flask.
+- Frontend assets are built into `frontend/dist/` and served by Flask.
