@@ -791,6 +791,7 @@ function GoogleMapsLocationField({ location, onChange }: GoogleMapsLocationField
   const locationRef = useRef(location);
   const onChangeRef = useRef(onChange);
   const [mapsState, setMapsState] = useState<"manual" | "loading" | "ready" | "error">("manual");
+  const [mapTilesLoaded, setMapTilesLoaded] = useState(false);
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim();
   const embedUrl = createGoogleMapsEmbedUrl(location);
 
@@ -805,10 +806,12 @@ function GoogleMapsLocationField({ location, onChange }: GoogleMapsLocationField
   useEffect(() => {
     if (!apiKey) {
       setMapsState("manual");
+      setMapTilesLoaded(false);
       return;
     }
 
     setMapsState("loading");
+    setMapTilesLoaded(false);
     loadGoogleMaps(apiKey)
       .then(() => setMapsState("ready"))
       .catch(() => setMapsState("error"));
@@ -860,6 +863,10 @@ function GoogleMapsLocationField({ location, onChange }: GoogleMapsLocationField
         zoom: 15,
         disableDefaultUI: true,
         zoomControl: true,
+      });
+
+      window.google.maps.event.addListenerOnce(mapInstanceRef.current, "tilesloaded", () => {
+        setMapTilesLoaded(true);
       });
     }
 
@@ -949,6 +956,10 @@ function GoogleMapsLocationField({ location, onChange }: GoogleMapsLocationField
     }
   }, [location.address, location.lat, location.lng, mapsState]);
 
+  const showEmbedPreview = Boolean(embedUrl);
+  const showPlaceholder = !embedUrl && (mapsState !== "ready" || !mapTilesLoaded);
+  const showInteractiveMap = mapsState === "ready" && mapTilesLoaded && !embedUrl;
+
   return (
     <div className="location-grid">
       <div className="location-fields">
@@ -997,8 +1008,8 @@ function GoogleMapsLocationField({ location, onChange }: GoogleMapsLocationField
           ) : null}
         </div>
       </div>
-      <div className="map-preview" ref={mapRef}>
-        {mapsState !== "ready" && embedUrl ? (
+      <div className="map-preview">
+        {showEmbedPreview ? (
           <iframe
             allowFullScreen
             loading="lazy"
@@ -1006,11 +1017,19 @@ function GoogleMapsLocationField({ location, onChange }: GoogleMapsLocationField
             src={embedUrl}
             title="Google Maps venue preview"
           />
-        ) : mapsState !== "ready" ? (
-          <div>
+        ) : null}
+        {showPlaceholder ? (
+          <div className="map-placeholder">
             <MapPin aria-hidden="true" size={28} />
             <span>{location.address || "No venue selected"}</span>
           </div>
+        ) : null}
+        {mapsState === "ready" ? (
+          <div
+            aria-label="Interactive Google Maps venue selector"
+            className={`map-canvas ${showInteractiveMap ? "is-visible" : ""}`}
+            ref={mapRef}
+          />
         ) : null}
       </div>
     </div>
