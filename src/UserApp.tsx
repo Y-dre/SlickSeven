@@ -1,40 +1,27 @@
 import {
-  AlertCircle,
-  Bell,
-  Bookmark,
-  BookmarkCheck,
   CalendarClock,
   CheckCircle2,
-  ClipboardCheck,
   FileText,
   ListChecks,
   MapPin,
   Navigation,
-  RefreshCw,
   Search,
   ShieldCheck,
   UserCheck,
   Users,
   XCircle,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { isProjectReady, loadPublishedProjects } from "./lib/projects";
+import React, { useEffect, useMemo, useState } from "react";
+import { loadPublishedProjects } from "./lib/projects";
+import { createGoogleMapsEmbedUrl } from "./lib/maps";
 import type { AyudaProject, ProjectStatus } from "./types";
 
-const USER_BOOKMARKS_KEY = "ayuda-user-bookmarks";
+type PublishedStatusFilter = Extract<ProjectStatus, "upcoming" | "active">;
 
 const statusLabels: Record<ProjectStatus, string> = {
   upcoming: "Upcoming",
-  ongoing: "Ongoing",
-  moved: "Moved",
-  cancelled: "Cancelled",
-};
-
-const statusMessages: Record<ProjectStatus, string> = {
-  upcoming: "Prepare your requirements before the scheduled distribution.",
-  ongoing: "Distribution is currently open at the announced venue.",
-  moved: "Check the latest advisory before going to the venue.",
-  cancelled: "Distribution is cancelled until a new announcement is posted.",
+  active: "Active",
+  archived: "Archived",
 };
 
 const claimingSteps = ["Registration", "Submit Requirements", "Verification", "Claim Ayuda"];
@@ -56,27 +43,102 @@ function formatDateTime(value: string): string {
   }).format(date);
 }
 
-function loadBookmarkIds(): string[] {
-  try {
-    const raw = window.localStorage.getItem(USER_BOOKMARKS_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.filter((item) => typeof item === "string") : [];
-  } catch {
-    return [];
+function formatScheduleSummary(startValue: string, endValue: string): string {
+  if (!endValue) {
+    return formatDateTime(startValue);
   }
+
+  const start = new Date(startValue);
+  const end = new Date(endValue);
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return formatDateTime(startValue);
+  }
+
+  const sameDay = start.toDateString() === end.toDateString();
+  const timeFormatter = new Intl.DateTimeFormat("en-PH", {
+    timeStyle: "short",
+  });
+
+  if (sameDay) {
+    return `${formatDateTime(startValue)} - ${timeFormatter.format(end)}`;
+  }
+
+  return `${formatDateTime(startValue)} - ${formatDateTime(endValue)}`;
 }
 
-function saveBookmarkIds(ids: string[]): void {
-  window.localStorage.setItem(USER_BOOKMARKS_KEY, JSON.stringify(ids));
+function formatScheduleDate(value: string): string {
+  if (!value) {
+    return "No schedule";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("en-PH", {
+    dateStyle: "full",
+  }).format(date);
+}
+
+function formatScheduleDateRange(startValue: string, endValue: string): string {
+  if (!startValue) {
+    return "Timeframe to be announced";
+  }
+
+  if (!endValue) {
+    return formatScheduleDate(startValue);
+  }
+
+  const start = new Date(startValue);
+  const end = new Date(endValue);
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return "Timeframe to be announced";
+  }
+
+  const formatter = new Intl.DateTimeFormat("en-PH", {
+    dateStyle: "full",
+  });
+
+  if (start.toDateString() === end.toDateString()) {
+    return formatter.format(start);
+  }
+
+  return `${formatter.format(start)} - ${formatter.format(end)}`;
+}
+
+function formatScheduleTimeframe(startValue: string, endValue: string): string {
+  if (!startValue) {
+    return "Timeframe to be announced";
+  }
+
+  const start = new Date(startValue);
+  const end = endValue ? new Date(endValue) : null;
+
+  if (Number.isNaN(start.getTime())) {
+    return "Timeframe to be announced";
+  }
+
+  const formatter = new Intl.DateTimeFormat("en-PH", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
+  if (!end || Number.isNaN(end.getTime())) {
+    return `${formatter.format(start)} - end time to be announced`;
+  }
+
+  return `${formatter.format(start)} - ${formatter.format(end)}`;
 }
 
 function UserApp() {
   const [projects, setProjects] = useState<AyudaProject[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | ProjectStatus>("all");
-  const [savedOnly, setSavedOnly] = useState(false);
-  const [bookmarks, setBookmarks] = useState<Set<string>>(() => new Set(loadBookmarkIds()));
+  const [statusFilter, setStatusFilter] = useState<PublishedStatusFilter>("upcoming");
   const [eligibilityAnswers, setEligibilityAnswers] = useState<Record<string, Record<number, boolean>>>({});
   const [documentChecks, setDocumentChecks] = useState<Record<string, Record<number, boolean>>>({});
   const [loadError, setLoadError] = useState("");
@@ -108,19 +170,18 @@ function UserApp() {
         project.location.address.toLowerCase().includes(normalizedQuery) ||
         project.requirements.some((requirement) => requirement.toLowerCase().includes(normalizedQuery)) ||
         project.eligibility.some((rule) => rule.toLowerCase().includes(normalizedQuery));
-      const matchesStatus = statusFilter === "all" || project.status === statusFilter;
-      const matchesSaved = !savedOnly || bookmarks.has(project.id);
+      const matchesStatus = project.status === statusFilter;
 
-      return matchesQuery && matchesStatus && matchesSaved;
+      return matchesQuery && matchesStatus;
     });
-  }, [bookmarks, projects, query, savedOnly, statusFilter]);
+  }, [projects, query, statusFilter]);
 
   const selectedProject = useMemo(() => {
     return filteredProjects.find((project) => project.id === selectedProjectId) ?? filteredProjects[0] ?? null;
   }, [filteredProjects, selectedProjectId]);
 
-  const bookmarkedCount = projects.filter((project) => bookmarks.has(project.id)).length;
-  const readyCount = projects.filter(isProjectReady).length;
+  const activeProjects = projects.filter((project) => project.status === "active").length;
+  const upcomingProjects = projects.filter((project) => project.status === "upcoming").length;
 
   async function refreshProjects() {
     try {
@@ -130,21 +191,6 @@ function UserApp() {
     } catch {
       setLoadError("Could not load published ayuda from the database.");
     }
-  }
-
-  function toggleBookmark(projectId: string) {
-    setBookmarks((current) => {
-      const next = new Set(current);
-
-      if (next.has(projectId)) {
-        next.delete(projectId);
-      } else {
-        next.add(projectId);
-      }
-
-      saveBookmarkIds(Array.from(next));
-      return next;
-    });
   }
 
   function updateEligibility(projectId: string, index: number, value: boolean) {
@@ -175,13 +221,8 @@ function UserApp() {
           <h1>Ayuda Announcements</h1>
         </div>
         <div className="topbar-actions">
-          <Metric label="Available" value={projects.length} />
-          <Metric label="Saved" value={bookmarkedCount} />
-          <Metric label="Ready" value={readyCount} />
-          <button className="button ghost" onClick={() => void refreshProjects()} type="button">
-            <RefreshCw aria-hidden="true" size={18} />
-            Refresh
-          </button>
+          <Metric label="Active" value={activeProjects} />
+          <Metric label="Upcoming" value={upcomingProjects} />
         </div>
       </header>
 
@@ -206,34 +247,26 @@ function UserApp() {
             />
           </label>
 
-          <div className="filters user-filters" aria-label="Ayuda filters">
+          <div className="filters single" aria-label="Published ayuda filters">
             <select
-              aria-label="Status filter"
-              onChange={(event) => setStatusFilter(event.target.value as "all" | ProjectStatus)}
+              aria-label="Published ayuda status"
+              onChange={(event) => setStatusFilter(event.target.value as PublishedStatusFilter)}
               value={statusFilter}
             >
-              <option value="all">All status</option>
               <option value="upcoming">Upcoming</option>
-              <option value="ongoing">Ongoing</option>
-              <option value="moved">Moved</option>
-              <option value="cancelled">Cancelled</option>
+              <option value="active">Active</option>
             </select>
-            <label className="toggle-filter">
-              <input checked={savedOnly} onChange={(event) => setSavedOnly(event.target.checked)} type="checkbox" />
-              <span>Saved only</span>
-            </label>
           </div>
 
           <div className="project-list">
             {filteredProjects.length === 0 ? (
               <div className="empty-state">
                 <FileText aria-hidden="true" size={28} />
-                <p>No published ayuda matches the current filters.</p>
+                <p>No published ayuda matches your search.</p>
               </div>
             ) : (
               filteredProjects.map((project) => {
                 const isSelected = selectedProject?.id === project.id;
-                const isBookmarked = bookmarks.has(project.id);
 
                 return (
                   <button
@@ -250,15 +283,11 @@ function UserApp() {
                       </span>
                       <span>
                         <CalendarClock aria-hidden="true" size={14} />
-                        {formatDateTime(project.schedule)}
+                        {formatScheduleSummary(project.schedule, project.scheduleEnd)}
                       </span>
                     </span>
                     <span className="project-row-meta">
                       <span className={`badge status-${project.status}`}>{statusLabels[project.status]}</span>
-                      <span className={`readiness ${isProjectReady(project) ? "ready" : "blocked"}`}>
-                        {isProjectReady(project) ? "Ready" : "Pending"}
-                      </span>
-                      {isBookmarked ? <BookmarkCheck aria-hidden="true" size={17} /> : null}
                     </span>
                   </button>
                 );
@@ -272,10 +301,8 @@ function UserApp() {
             <AyudaDetails
               documentChecks={documentChecks[selectedProject.id] ?? {}}
               eligibilityAnswers={eligibilityAnswers[selectedProject.id] ?? {}}
-              isBookmarked={bookmarks.has(selectedProject.id)}
               onDocumentCheck={(index, value) => updateDocumentCheck(selectedProject.id, index, value)}
               onEligibilityCheck={(index, value) => updateEligibility(selectedProject.id, index, value)}
-              onToggleBookmark={() => toggleBookmark(selectedProject.id)}
               project={selectedProject}
             />
           ) : (
@@ -307,20 +334,16 @@ function Metric({ label, value }: MetricProps) {
 interface AyudaDetailsProps {
   documentChecks: Record<number, boolean>;
   eligibilityAnswers: Record<number, boolean>;
-  isBookmarked: boolean;
   onDocumentCheck: (index: number, value: boolean) => void;
   onEligibilityCheck: (index: number, value: boolean) => void;
-  onToggleBookmark: () => void;
   project: AyudaProject;
 }
 
 function AyudaDetails({
   documentChecks,
   eligibilityAnswers,
-  isBookmarked,
   onDocumentCheck,
   onEligibilityCheck,
-  onToggleBookmark,
   project,
 }: AyudaDetailsProps) {
   const eligibilityTouched = Object.keys(eligibilityAnswers).length > 0;
@@ -328,7 +351,7 @@ function AyudaDetails({
     project.eligibility.length > 0 && project.eligibility.every((_, index) => eligibilityAnswers[index] === true);
   const documentsReady =
     project.requirements.length > 0 && project.requirements.every((_, index) => documentChecks[index] === true);
-  const statusNote = project.statusNote || statusMessages[project.status];
+  const embedUrl = createGoogleMapsEmbedUrl(project.location);
 
   return (
     <>
@@ -336,18 +359,6 @@ function AyudaDetails({
         <div>
           <p className="eyebrow">Selected Ayuda</p>
           <h2>{project.name}</h2>
-        </div>
-        <button className="button secondary" onClick={onToggleBookmark} type="button">
-          {isBookmarked ? <BookmarkCheck aria-hidden="true" size={18} /> : <Bookmark aria-hidden="true" size={18} />}
-          {isBookmarked ? "Saved" : "Save"}
-        </button>
-      </div>
-
-      <div className={`status-banner status-${project.status}`}>
-        <Bell aria-hidden="true" size={19} />
-        <div>
-          <strong>{statusLabels[project.status]}</strong>
-          <span>{statusNote}</span>
         </div>
       </div>
 
@@ -358,23 +369,19 @@ function AyudaDetails({
             <h3>Schedule</h3>
           </div>
           <div className="detail-stat">
-            <strong>{formatDateTime(project.schedule)}</strong>
-            <span>{project.beneficiaryTarget.toLocaleString()} beneficiaries</span>
+            <strong>{formatScheduleDateRange(project.schedule, project.scheduleEnd)}</strong>
+            <span>{formatScheduleTimeframe(project.schedule, project.scheduleEnd)}</span>
           </div>
         </section>
 
-        <section className="detail-section readiness-section">
+        <section className="detail-section">
           <div className="section-heading">
-            <ClipboardCheck aria-hidden="true" size={18} />
-            <h3>Event Readiness</h3>
+            <Users aria-hidden="true" size={18} />
+            <h3>Beneficiary Targets</h3>
           </div>
-          <div className={`readiness-summary ${isProjectReady(project) ? "ready" : "blocked"}`}>
-            {isProjectReady(project) ? (
-              <CheckCircle2 aria-hidden="true" size={18} />
-            ) : (
-              <AlertCircle aria-hidden="true" size={18} />
-            )}
-            {isProjectReady(project) ? "All admin dependencies are ready." : "Some admin dependencies are pending."}
+          <div className="detail-stat">
+            <strong>{project.beneficiaryTarget || "To be announced"}</strong>
+            <span>Status: {statusLabels[project.status]}</span>
           </div>
         </section>
 
@@ -383,13 +390,7 @@ function AyudaDetails({
             <MapPin aria-hidden="true" size={18} />
             <h3>Venue</h3>
           </div>
-          <div className="user-map-layout">
-            <div className="map-preview user-map-preview">
-              <div>
-                <MapPin aria-hidden="true" size={28} />
-                <span>{project.location.address || "No venue selected"}</span>
-              </div>
-            </div>
+          <div className="location-grid">
             <div className="venue-actions">
               <strong>{project.location.address || "Venue to be announced"}</strong>
               {project.location.mapsUrl ? (
@@ -398,6 +399,22 @@ function AyudaDetails({
                   Open Map
                 </a>
               ) : null}
+            </div>
+            <div className="map-preview">
+              {embedUrl ? (
+                <iframe
+                  allowFullScreen
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                  src={embedUrl}
+                  title="Google Maps venue preview"
+                />
+              ) : (
+                <div>
+                  <MapPin aria-hidden="true" size={28} />
+                  <span>{project.location.address || "No venue selected"}</span>
+                </div>
+              )}
             </div>
           </div>
         </section>

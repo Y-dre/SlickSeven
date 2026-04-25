@@ -14,7 +14,7 @@ import {
   Send,
   Users,
 } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   createDependency,
   createEmptyProject,
@@ -25,6 +25,13 @@ import {
   upsertProject,
   validateProjectForPublish,
 } from "./lib/projects";
+import {
+  createGoogleMapsEmbedUrl,
+  createGoogleMapsUrl,
+  hasCoordinates,
+  parseGoogleMapsPosition,
+  type MapPosition,
+} from "./lib/maps";
 import type { AyudaProject, DependencyItem, Location, ProjectStatus, PublishState } from "./types";
 
 declare global {
@@ -39,9 +46,8 @@ const AUTH_STORAGE_KEY = "ayuda-admin-authenticated";
 
 const statusLabels: Record<ProjectStatus, string> = {
   upcoming: "Upcoming",
-  ongoing: "Ongoing",
-  moved: "Moved",
-  cancelled: "Cancelled",
+  active: "Active",
+  archived: "Archived",
 };
 
 const publishLabels: Record<PublishState, string> = {
@@ -49,7 +55,10 @@ const publishLabels: Record<PublishState, string> = {
   published: "Published",
 };
 
-const DEFAULT_MAP_CENTER = { lat: 14.5995, lng: 120.9842 };
+const DEFAULT_MAP_POSITION: MapPosition = {
+  lat: 14.5995,
+  lng: 120.9842,
+};
 
 let googleMapsPromise: Promise<any> | null = null;
 
@@ -84,6 +93,10 @@ function loadGoogleMaps(apiKey: string): Promise<any> {
   return googleMapsPromise;
 }
 
+function roundCoordinate(value: number): number {
+  return Number(value.toFixed(7));
+}
+
 function cloneProject(project: AyudaProject): AyudaProject {
   return JSON.parse(JSON.stringify(project)) as AyudaProject;
 }
@@ -105,8 +118,43 @@ function formatDateTime(value: string): string {
   }).format(date);
 }
 
-function createMapsSearchUrl(lat: number, lng: number): string {
-  return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+function formatScheduleRange(startValue: string, endValue: string): string {
+  if (!startValue && !endValue) {
+    return "No schedule";
+  }
+
+  if (!endValue) {
+    return formatDateTime(startValue);
+  }
+
+  if (!startValue) {
+    return formatDateTime(endValue);
+  }
+
+  const start = new Date(startValue);
+  const end = new Date(endValue);
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return `${startValue} - ${endValue}`;
+  }
+
+  const sameDay = start.toDateString() === end.toDateString();
+  const dateFormatter = new Intl.DateTimeFormat("en-PH", {
+    dateStyle: "medium",
+  });
+  const timeFormatter = new Intl.DateTimeFormat("en-PH", {
+    timeStyle: "short",
+  });
+
+  if (sameDay) {
+    return `${dateFormatter.format(start)}, ${timeFormatter.format(start)} - ${timeFormatter.format(end)}`;
+  }
+
+  return `${formatDateTime(startValue)} - ${formatDateTime(endValue)}`;
+}
+
+function isNumericOnly(value: string): boolean {
+  return /^\d+(\.\d+)?$/.test(value.trim());
 }
 
 function normalizeProject(project: AyudaProject): AyudaProject {
@@ -120,9 +168,12 @@ function normalizeProject(project: AyudaProject): AyudaProject {
       address: project.location.address.trim(),
       mapsUrl: project.location.mapsUrl?.trim() ?? "",
     },
+    schedule: project.schedule,
+    scheduleEnd: project.scheduleEnd,
     dependencies: project.dependencies
       .map((item) => ({ ...item, label: item.label.trim() }))
       .filter((item) => item.label),
+    beneficiaryTarget: project.beneficiaryTarget.trim(),
     statusNote: project.statusNote.trim(),
   };
 }
@@ -135,8 +186,7 @@ function App() {
   const [draft, setDraft] = useState<AyudaProject>(() => createEmptyProject());
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [publishFilter, setPublishFilter] = useState<"all" | PublishState>("all");
-  const [statusFilter, setStatusFilter] = useState<"all" | ProjectStatus>("all");
+  const [statusFilter, setStatusFilter] = useState<ProjectStatus>("active");
   const [readinessFilter, setReadinessFilter] = useState<"all" | "ready" | "not-ready">("all");
   const [formErrors, setFormErrors] = useState<string[]>([]);
   const [formMessage, setFormMessage] = useState("");
@@ -160,22 +210,22 @@ function App() {
         !normalizedQuery ||
         project.name.toLowerCase().includes(normalizedQuery) ||
         project.location.address.toLowerCase().includes(normalizedQuery);
-      const matchesPublish = publishFilter === "all" || project.publishState === publishFilter;
-      const matchesStatus = statusFilter === "all" || project.status === statusFilter;
+      const matchesStatus = project.status === statusFilter;
       const ready = isProjectReady(project);
       const matchesReadiness =
         readinessFilter === "all" ||
         (readinessFilter === "ready" && ready) ||
         (readinessFilter === "not-ready" && !ready);
 
-      return matchesQuery && matchesPublish && matchesStatus && matchesReadiness;
+      return matchesQuery && matchesStatus && matchesReadiness;
     });
-  }, [projects, publishFilter, query, readinessFilter, statusFilter]);
+  }, [projects, query, readinessFilter, statusFilter]);
 
   const publishValidation = useMemo(() => validateProjectForPublish(normalizeProject(draft)), [draft]);
   const draftIsSaved = projects.some((project) => project.id === draft.id);
-  const publishedProjects = projects.filter((project) => project.publishState === "published").length;
-  const readyProjects = projects.filter(isProjectReady).length;
+  const activeProjects = projects.filter((project) => project.status === "active").length;
+  const upcomingProjects = projects.filter((project) => project.status === "upcoming").length;
+  const archivedProjects = projects.filter((project) => project.status === "archived").length;
 
   function handleLogin() {
     window.sessionStorage.setItem(AUTH_STORAGE_KEY, "true");
@@ -241,6 +291,12 @@ function App() {
 
     if (!normalized.name) {
       setFormErrors(["Project name is required to save."]);
+      setFormMessage("");
+      return;
+    }
+
+    if (normalized.beneficiaryTarget && isNumericOnly(normalized.beneficiaryTarget)) {
+      setFormErrors(["Beneficiary target must be a classification, not a number."]);
       setFormMessage("");
       return;
     }
@@ -329,9 +385,9 @@ function App() {
           <h1>Ayuda Project Manager</h1>
         </div>
         <div className="topbar-actions">
-          <Metric label="Projects" value={projects.length} />
-          <Metric label="Published" value={publishedProjects} />
-          <Metric label="Ready" value={readyProjects} />
+          <Metric label="Active" value={activeProjects} />
+          <Metric label="Upcoming" value={upcomingProjects} />
+          <Metric label="Archived" value={archivedProjects} />
           <button className="button ghost" onClick={handleLogout} type="button">
             <LogOut aria-hidden="true" size={18} />
             Logout
@@ -363,24 +419,13 @@ function App() {
 
           <div className="filters" aria-label="Project filters">
             <select
-              aria-label="Publish filter"
-              onChange={(event) => setPublishFilter(event.target.value as "all" | PublishState)}
-              value={publishFilter}
-            >
-              <option value="all">All states</option>
-              <option value="draft">Draft</option>
-              <option value="published">Published</option>
-            </select>
-            <select
               aria-label="Status filter"
-              onChange={(event) => setStatusFilter(event.target.value as "all" | ProjectStatus)}
+              onChange={(event) => setStatusFilter(event.target.value as ProjectStatus)}
               value={statusFilter}
             >
-              <option value="all">All status</option>
+              <option value="active">Active</option>
               <option value="upcoming">Upcoming</option>
-              <option value="ongoing">Ongoing</option>
-              <option value="moved">Moved</option>
-              <option value="cancelled">Cancelled</option>
+              <option value="archived">Archived</option>
             </select>
             <select
               aria-label="Readiness filter"
@@ -420,7 +465,7 @@ function App() {
                     </span>
                     <span>
                       <CalendarClock aria-hidden="true" size={14} />
-                      {formatDateTime(project.schedule)}
+                      {formatScheduleRange(project.schedule, project.scheduleEnd)}
                     </span>
                   </span>
                   <span className="project-row-meta">
@@ -488,7 +533,7 @@ function App() {
                 </label>
 
                 <label className="field">
-                  <span>Date & Time</span>
+                  <span>Start Date & Time</span>
                   <input
                     onChange={(event) => updateDraftField("schedule", event.target.value)}
                     type="datetime-local"
@@ -497,20 +542,29 @@ function App() {
                 </label>
 
                 <label className="field">
-                  <span>Beneficiary Target</span>
+                  <span>End Date & Time</span>
                   <input
-                    min="0"
-                    onChange={(event) =>
-                      updateDraftField("beneficiaryTarget", Number.parseInt(event.target.value || "0", 10))
-                    }
-                    type="number"
-                    value={draft.beneficiaryTarget}
+                    onChange={(event) => updateDraftField("scheduleEnd", event.target.value)}
+                    type="datetime-local"
+                    value={draft.scheduleEnd}
                   />
                 </label>
 
                 <label className="field">
-                  <span>Publish State</span>
-                  <input readOnly value={publishLabels[draft.publishState]} />
+                  <span>Beneficiary Classification</span>
+                  <input
+                    list="beneficiary-classifications"
+                    onChange={(event) => updateDraftField("beneficiaryTarget", event.target.value)}
+                    placeholder="Example: PWDs, Senior Citizen"
+                    value={draft.beneficiaryTarget}
+                  />
+                  <datalist id="beneficiary-classifications">
+                    <option value="PWDs" />
+                    <option value="Senior Citizen" />
+                    <option value="Solo Parents" />
+                    <option value="Students" />
+                    <option value="Fisherfolk" />
+                  </datalist>
                 </label>
               </div>
             </section>
@@ -624,10 +678,9 @@ function App() {
                     onChange={(event) => updateDraftField("status", event.target.value as ProjectStatus)}
                     value={draft.status}
                   >
+                    <option value="active">Active</option>
                     <option value="upcoming">Upcoming</option>
-                    <option value="ongoing">Ongoing</option>
-                    <option value="moved">Moved</option>
-                    <option value="cancelled">Cancelled</option>
+                    <option value="archived">Archived</option>
                   </select>
                 </label>
 
@@ -734,8 +787,20 @@ function GoogleMapsLocationField({ location, onChange }: GoogleMapsLocationField
   const mapRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
+  const geocoderRef = useRef<any>(null);
+  const locationRef = useRef(location);
+  const onChangeRef = useRef(onChange);
   const [mapsState, setMapsState] = useState<"manual" | "loading" | "ready" | "error">("manual");
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim();
+  const embedUrl = createGoogleMapsEmbedUrl(location);
+
+  useEffect(() => {
+    locationRef.current = location;
+  }, [location]);
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
 
   useEffect(() => {
     if (!apiKey) {
@@ -763,73 +828,126 @@ function GoogleMapsLocationField({ location, onChange }: GoogleMapsLocationField
       const lat = place.geometry?.location?.lat();
       const lng = place.geometry?.location?.lng();
       const address = place.formatted_address || place.name || inputRef.current?.value || "";
+      const selectedPosition =
+        typeof lat === "number" && Number.isFinite(lat) && typeof lng === "number" && Number.isFinite(lng)
+          ? { lat: roundCoordinate(lat), lng: roundCoordinate(lng) }
+          : null;
+      const currentLocation = locationRef.current;
 
-      onChange({
+      onChangeRef.current({
+        ...currentLocation,
         address,
         placeId: place.place_id,
-        lat,
-        lng,
-        mapsUrl: place.url || location.mapsUrl || "",
+        lat: selectedPosition?.lat,
+        lng: selectedPosition?.lng,
+        mapsUrl: place.url || (selectedPosition ? createGoogleMapsUrl(selectedPosition) : currentLocation.mapsUrl || ""),
       });
     });
 
     return () => listener.remove();
-  }, [location.mapsUrl, mapsState, onChange]);
+  }, [mapsState]);
 
   useEffect(() => {
     if (mapsState !== "ready" || !mapRef.current || !window.google?.maps) {
       return;
     }
 
-    const hasLocation = location.lat != null && location.lng != null;
-    const center = hasLocation ? { lat: location.lat!, lng: location.lng! } : DEFAULT_MAP_CENTER;
-
     if (!mapInstanceRef.current) {
+      const initialCenter = hasCoordinates(locationRef.current) ? locationRef.current : DEFAULT_MAP_POSITION;
+
       mapInstanceRef.current = new window.google.maps.Map(mapRef.current, {
-        center,
+        center: initialCenter,
         zoom: 15,
         disableDefaultUI: true,
         zoomControl: true,
       });
-    } else {
-      mapInstanceRef.current.setCenter(center);
     }
 
-    if (hasLocation && !markerRef.current) {
-      markerRef.current = new window.google.maps.Marker({
-        map: mapInstanceRef.current,
-        position: center,
-      });
-    } else if (hasLocation) {
-      markerRef.current.setMap(mapInstanceRef.current);
-      markerRef.current.setPosition(center);
-    } else if (markerRef.current) {
-      markerRef.current.setMap(null);
-    }
-
-    const clickListener = mapInstanceRef.current.addListener("click", (event: any) => {
+    const listener = mapInstanceRef.current.addListener("click", (event: any) => {
       if (!event.latLng) {
         return;
       }
 
-      const clickedPos = {
-        lat: event.latLng.lat(),
-        lng: event.latLng.lng(),
+      const clickedPosition: MapPosition = {
+        lat: roundCoordinate(event.latLng.lat()),
+        lng: roundCoordinate(event.latLng.lng()),
       };
+      const currentLocation = locationRef.current;
+      const fallbackAddress = currentLocation.address || `${clickedPosition.lat}, ${clickedPosition.lng}`;
+      const mapsUrl = createGoogleMapsUrl(clickedPosition);
 
-      onChange({
-        ...location,
-        lat: clickedPos.lat,
-        lng: clickedPos.lng,
+      onChangeRef.current({
+        ...currentLocation,
+        address: fallbackAddress,
         placeId: undefined,
-        mapsUrl: createMapsSearchUrl(clickedPos.lat, clickedPos.lng),
+        lat: clickedPosition.lat,
+        lng: clickedPosition.lng,
+        mapsUrl,
       });
 
-      console.log(`Clicked at: ${clickedPos.lat}, ${clickedPos.lng}`);
+      mapInstanceRef.current.panTo(clickedPosition);
+
+      if (!geocoderRef.current && window.google?.maps?.Geocoder) {
+        geocoderRef.current = new window.google.maps.Geocoder();
+      }
+
+      geocoderRef.current?.geocode({ location: clickedPosition }, (results: any[] | null, status: string) => {
+        const result = status === "OK" ? results?.[0] : null;
+
+        if (!result) {
+          return;
+        }
+
+        const latestLocation = locationRef.current;
+
+        if (latestLocation.lat !== clickedPosition.lat || latestLocation.lng !== clickedPosition.lng) {
+          return;
+        }
+
+        onChangeRef.current({
+          ...latestLocation,
+          address: result.formatted_address || latestLocation.address,
+          placeId: result.place_id,
+          mapsUrl,
+        });
+      });
     });
 
-    return () => clickListener.remove();
-  }, [location, mapsState, onChange]);
+    return () => listener.remove();
+  }, [mapsState]);
+
+  useEffect(() => {
+    if (mapsState !== "ready" || !window.google?.maps || !mapInstanceRef.current) {
+      return;
+    }
+
+    if (!hasCoordinates(location)) {
+      mapInstanceRef.current.setCenter(DEFAULT_MAP_POSITION);
+
+      if (markerRef.current) {
+        markerRef.current.setMap(null);
+        markerRef.current = null;
+      }
+
+      return;
+    }
+
+    const center = { lat: location.lat, lng: location.lng };
+
+    mapInstanceRef.current.setCenter(center);
+
+    if (!markerRef.current) {
+      markerRef.current = new window.google.maps.Marker({
+        map: mapInstanceRef.current,
+        position: center,
+        title: location.address || "Selected venue",
+      });
+    } else {
+      markerRef.current.setMap(mapInstanceRef.current);
+      markerRef.current.setPosition(center);
+      markerRef.current.setTitle(location.address || "Selected venue");
+    }
+  }, [location.address, location.lat, location.lng, mapsState]);
 
   return (
     <div className="location-grid">
@@ -846,7 +964,17 @@ function GoogleMapsLocationField({ location, onChange }: GoogleMapsLocationField
         <label className="field">
           <span>Google Maps URL</span>
           <input
-            onChange={(event) => onChange({ ...location, mapsUrl: event.target.value })}
+            onChange={(event) => {
+              const mapsUrl = event.target.value;
+              const position = parseGoogleMapsPosition(mapsUrl);
+
+              onChange({
+                ...location,
+                lat: position?.lat ?? location.lat,
+                lng: position?.lng ?? location.lng,
+                mapsUrl,
+              });
+            }}
             placeholder="https://maps.google.com/..."
             value={location.mapsUrl ?? ""}
           />
@@ -870,7 +998,15 @@ function GoogleMapsLocationField({ location, onChange }: GoogleMapsLocationField
         </div>
       </div>
       <div className="map-preview" ref={mapRef}>
-        {mapsState !== "ready" ? (
+        {mapsState !== "ready" && embedUrl ? (
+          <iframe
+            allowFullScreen
+            loading="lazy"
+            referrerPolicy="no-referrer-when-downgrade"
+            src={embedUrl}
+            title="Google Maps venue preview"
+          />
+        ) : mapsState !== "ready" ? (
           <div>
             <MapPin aria-hidden="true" size={28} />
             <span>{location.address || "No venue selected"}</span>
