@@ -467,7 +467,7 @@ function App() {
               value={readinessFilter}
             >
               <option value="all">All</option>
-              <option value="ready">All ready</option>
+              <option value="ready">Ready</option>
               <option value="not-ready">Missing items</option>
             </select>
           </div>
