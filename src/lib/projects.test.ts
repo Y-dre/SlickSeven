@@ -24,6 +24,7 @@ function createProject(overrides: Partial<AyudaProject> = {}): AyudaProject {
       mapsUrl: "",
     },
     schedule: "2026-05-01T09:00",
+    scheduleEnd: "2026-05-01T12:00",
     beneficiaryTarget: "Senior Citizen",
     dependencies: [
       {
@@ -65,6 +66,7 @@ describe("project helpers", () => {
       eligibility: ["Resident of the barangay"],
       location: { address: "Municipal Hall" },
       schedule: "2026-05-01T09:00",
+      scheduleEnd: "2026-05-01T12:00",
       beneficiaryTarget: "Senior Citizen",
     };
 

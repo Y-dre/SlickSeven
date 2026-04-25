@@ -12,6 +12,7 @@ export const MOCK_PROJECTS = [
       mapsUrl: "https://maps.google.com/?q=14.5995,120.9842",
     },
     schedule: "2026-06-15T08:30",
+    scheduleEnd: "2026-06-15T11:30",
     beneficiaryTarget: "Senior Citizen",
     dependencies: [
       { id: "dep-mock-001-a", label: "Funds Ready", ready: true },
@@ -37,6 +38,7 @@ export const MOCK_PROJECTS = [
       mapsUrl: "https://maps.google.com/?q=14.6123,120.9765",
     },
     schedule: "2026-06-10T09:00",
+    scheduleEnd: "2026-06-10T12:00",
     beneficiaryTarget: "PWDs",
     dependencies: [
       { id: "dep-mock-002-a", label: "Funds Ready", ready: true },
@@ -62,6 +64,7 @@ export const MOCK_PROJECTS = [
       mapsUrl: "https://maps.google.com/?q=14.6201,121.0014",
     },
     schedule: "2026-06-12T13:30",
+    scheduleEnd: "2026-06-12T16:30",
     beneficiaryTarget: "Disaster-affected Residents",
     dependencies: [
       { id: "dep-mock-003-a", label: "Funds Ready", ready: true },
@@ -85,6 +88,7 @@ export const MOCK_PROJECTS = [
       mapsUrl: "",
     },
     schedule: "2026-06-20T10:00",
+    scheduleEnd: "2026-06-20T13:00",
     beneficiaryTarget: "Solo Parents",
     dependencies: [
       { id: "dep-mock-004-a", label: "Funds Ready", ready: false },
@@ -107,6 +111,7 @@ export const MOCK_PROJECTS = [
       mapsUrl: "",
     },
     schedule: "",
+    scheduleEnd: "",
     beneficiaryTarget: "Medical Aid Applicants",
     dependencies: [
       { id: "dep-mock-005-a", label: "Funds Ready", ready: false },
@@ -132,6 +137,7 @@ export const MOCK_PROJECTS = [
       mapsUrl: "https://maps.google.com/?q=14.575,120.99",
     },
     schedule: "2026-07-01T14:00",
+    scheduleEnd: "2026-07-01T17:00",
     beneficiaryTarget: "Livelihood Applicants",
     dependencies: [
       { id: "dep-mock-006-a", label: "Funds Ready", ready: true },
@@ -158,6 +164,7 @@ export const MOCK_PROJECTS = [
       mapsUrl: "https://maps.google.com/?q=14.545,120.97",
     },
     schedule: "2026-06-28T07:00",
+    scheduleEnd: "2026-06-28T10:00",
     beneficiaryTarget: "Fisherfolk",
     dependencies: [
       { id: "dep-mock-007-a", label: "Funds Ready", ready: true },
@@ -181,6 +188,7 @@ export const MOCK_PROJECTS = [
       mapsUrl: "",
     },
     schedule: "2026-06-11T11:30",
+    scheduleEnd: "2026-06-11T14:30",
     beneficiaryTarget: "Daily Wage Workers",
     dependencies: [
       { id: "dep-mock-008-a", label: "Funds Ready", ready: true },

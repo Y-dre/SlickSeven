@@ -23,6 +23,7 @@ export interface AyudaProject {
   eligibility: string[];
   location: Location;
   schedule: string;
+  scheduleEnd: string;
   beneficiaryTarget: string;
   dependencies: DependencyItem[];
   publishState: PublishState;

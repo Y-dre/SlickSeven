@@ -231,6 +231,7 @@ def normalize_project_payload(input_data: Any) -> dict[str, Any]:
     maps_url = location.get("mapsUrl")
     parsed_position = _parse_google_maps_position(maps_url)
     schedule = payload.get("schedule")
+    schedule_end = payload.get("scheduleEnd")
     beneficiary_target = payload.get("beneficiaryTarget")
     status_note = payload.get("statusNote")
     created_at = payload.get("createdAt")
@@ -250,6 +251,7 @@ def normalize_project_payload(input_data: Any) -> dict[str, Any]:
             "mapsUrl": maps_url.strip() if isinstance(maps_url, str) else "",
         },
         "schedule": schedule if isinstance(schedule, str) else "",
+        "scheduleEnd": schedule_end if isinstance(schedule_end, str) else "",
         "beneficiaryTarget": _normalize_beneficiary_target(beneficiary_target),
         "dependencies": _normalize_dependencies(payload.get("dependencies")),
         "publishState": "published" if payload.get("publishState") == "published" else "draft",
@@ -288,6 +290,7 @@ def ensure_schema() -> None:
                   lng DECIMAL(10,7) NULL,
                   maps_url VARCHAR(500) NULL,
                   schedule_at DATETIME NULL,
+                  schedule_end_at DATETIME NULL,
                   beneficiary_target VARCHAR(120) NOT NULL DEFAULT '',
                   publish_state ENUM('draft', 'published') NOT NULL DEFAULT 'draft',
                   status ENUM('upcoming', 'active', 'archived') NOT NULL DEFAULT 'upcoming',
@@ -351,6 +354,21 @@ def ensure_schema() -> None:
                 """
             )
             cursor.execute("ALTER TABLE projects MODIFY schedule_at DATETIME NULL")
+            cursor.execute(
+                """
+                SELECT COUNT(*)
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = %s
+                  AND TABLE_NAME = 'projects'
+                  AND COLUMN_NAME = 'schedule_end_at'
+                """,
+                [DB_NAME],
+            )
+            schedule_end_column_exists = cursor.fetchone()[0] > 0
+
+            if not schedule_end_column_exists:
+                cursor.execute("ALTER TABLE projects ADD COLUMN schedule_end_at DATETIME NULL AFTER schedule_at")
+
             cursor.execute("ALTER TABLE projects MODIFY beneficiary_target VARCHAR(120) NOT NULL DEFAULT ''")
             cursor.execute(
                 "ALTER TABLE projects MODIFY status "
@@ -432,6 +450,7 @@ def list_projects(*, published_only: bool = False, project_ids: list[str] | None
                   lng,
                   maps_url,
                   schedule_at,
+                  schedule_end_at,
                   beneficiary_target,
                   publish_state,
                   status,
@@ -440,7 +459,7 @@ def list_projects(*, published_only: bool = False, project_ids: list[str] | None
                   updated_at
                 FROM projects
                 {where_sql}
-                ORDER BY schedule_at IS NULL, schedule_at ASC, name ASC
+                ORDER BY schedule_at IS NULL, schedule_at ASC, schedule_end_at ASC, name ASC
                 """,
                 params,
             )
@@ -525,6 +544,7 @@ def list_projects(*, published_only: bool = False, project_ids: list[str] | None
                 "eligibility": eligibility_by_project.get(row_id, []),
                 "location": location,
                 "schedule": to_ui_datetime(row.get("schedule_at")),
+                "scheduleEnd": to_ui_datetime(row.get("schedule_end_at")),
                 "beneficiaryTarget": str(row.get("beneficiary_target") or ""),
                 "dependencies": dependencies_by_project.get(row_id, []),
                 "publishState": "published" if row.get("publish_state") == "published" else "draft",
@@ -556,6 +576,7 @@ def save_project(project_payload: Any) -> dict[str, Any]:
                   lng,
                   maps_url,
                   schedule_at,
+                  schedule_end_at,
                   beneficiary_target,
                   publish_state,
                   status,
@@ -563,7 +584,7 @@ def save_project(project_payload: Any) -> dict[str, Any]:
                   created_at,
                   updated_at
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
                 ON DUPLICATE KEY UPDATE
                   name = VALUES(name),
                   address = VALUES(address),
@@ -572,6 +593,7 @@ def save_project(project_payload: Any) -> dict[str, Any]:
                   lng = VALUES(lng),
                   maps_url = VALUES(maps_url),
                   schedule_at = VALUES(schedule_at),
+                  schedule_end_at = VALUES(schedule_end_at),
                   beneficiary_target = VALUES(beneficiary_target),
                   publish_state = VALUES(publish_state),
                   status = VALUES(status),
@@ -587,6 +609,7 @@ def save_project(project_payload: Any) -> dict[str, Any]:
                     project["location"]["lng"],
                     project["location"]["mapsUrl"],
                     to_sql_datetime(project["schedule"]),
+                    to_sql_datetime(project["scheduleEnd"]),
                     project["beneficiaryTarget"],
                     project["publishState"],
                     project["status"],

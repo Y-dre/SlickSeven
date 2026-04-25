@@ -66,6 +66,7 @@ async function ensureSchema(pool) {
       lng DECIMAL(10,7) NULL,
       maps_url VARCHAR(500) NULL,
       schedule_at DATETIME NULL,
+      schedule_end_at DATETIME NULL,
       beneficiary_target VARCHAR(120) NOT NULL DEFAULT '',
       publish_state ENUM('draft', 'published') NOT NULL DEFAULT 'draft',
       status ENUM('upcoming', 'active', 'archived') NOT NULL DEFAULT 'upcoming',
@@ -126,6 +127,21 @@ async function ensureSchema(pool) {
   `);
 
   await pool.query(`ALTER TABLE projects MODIFY schedule_at DATETIME NULL`);
+  const [scheduleEndColumns] = await pool.query(
+    `
+      SELECT COUNT(*) AS column_count
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = ?
+        AND TABLE_NAME = 'projects'
+        AND COLUMN_NAME = 'schedule_end_at'
+    `,
+    [DB_NAME],
+  );
+
+  if (Number(scheduleEndColumns?.[0]?.column_count ?? 0) === 0) {
+    await pool.query(`ALTER TABLE projects ADD COLUMN schedule_end_at DATETIME NULL AFTER schedule_at`);
+  }
+
   await pool.query(`ALTER TABLE projects MODIFY beneficiary_target VARCHAR(120) NOT NULL DEFAULT ''`);
   await pool.query(
     `ALTER TABLE projects MODIFY status ENUM('upcoming', 'ongoing', 'moved', 'cancelled', 'active', 'archived') NOT NULL DEFAULT 'upcoming'`,
@@ -183,6 +199,7 @@ async function main() {
               lng,
               maps_url,
               schedule_at,
+              schedule_end_at,
               beneficiary_target,
               publish_state,
               status,
@@ -190,7 +207,7 @@ async function main() {
               created_at,
               updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `,
           [
             project.id,
@@ -201,6 +218,7 @@ async function main() {
             project.location.lng ?? null,
             project.location.mapsUrl ?? "",
             toSqlDateTime(project.schedule),
+            toSqlDateTime(project.scheduleEnd ?? ""),
             project.beneficiaryTarget,
             project.publishState,
             normalizeStatus(project.status),

@@ -144,6 +144,7 @@ function normalizeProjectPayload(input) {
       mapsUrl: typeof input?.location?.mapsUrl === "string" ? input.location.mapsUrl.trim() : "",
     },
     schedule: typeof input?.schedule === "string" ? input.schedule : "",
+    scheduleEnd: typeof input?.scheduleEnd === "string" ? input.scheduleEnd : "",
     beneficiaryTarget: typeof input?.beneficiaryTarget === "string" ? input.beneficiaryTarget.trim() : "",
     dependencies: normalizeDependencies(input?.dependencies),
     publishState: input?.publishState === "published" ? "published" : "draft",
@@ -184,6 +185,7 @@ async function ensureSchema() {
       lng DECIMAL(10,7) NULL,
       maps_url VARCHAR(500) NULL,
       schedule_at DATETIME NULL,
+      schedule_end_at DATETIME NULL,
       beneficiary_target VARCHAR(120) NOT NULL DEFAULT '',
       publish_state ENUM('draft', 'published') NOT NULL DEFAULT 'draft',
       status ENUM('upcoming', 'active', 'archived') NOT NULL DEFAULT 'upcoming',
@@ -244,6 +246,21 @@ async function ensureSchema() {
   `);
 
   await pool.query(`ALTER TABLE projects MODIFY schedule_at DATETIME NULL`);
+  const [scheduleEndColumns] = await pool.query(
+    `
+      SELECT COUNT(*) AS column_count
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = ?
+        AND TABLE_NAME = 'projects'
+        AND COLUMN_NAME = 'schedule_end_at'
+    `,
+    [DB_NAME],
+  );
+
+  if (Number(scheduleEndColumns?.[0]?.column_count ?? 0) === 0) {
+    await pool.query(`ALTER TABLE projects ADD COLUMN schedule_end_at DATETIME NULL AFTER schedule_at`);
+  }
+
   await pool.query(`ALTER TABLE projects MODIFY beneficiary_target VARCHAR(120) NOT NULL DEFAULT ''`);
   await pool.query(
     `ALTER TABLE projects MODIFY status ENUM('upcoming', 'ongoing', 'moved', 'cancelled', 'active', 'archived') NOT NULL DEFAULT 'upcoming'`,
@@ -313,6 +330,7 @@ async function listProjects({ publishedOnly = false, projectIds = null } = {}) {
         lng,
         maps_url,
         schedule_at,
+        schedule_end_at,
         beneficiary_target,
         publish_state,
         status,
@@ -321,7 +339,7 @@ async function listProjects({ publishedOnly = false, projectIds = null } = {}) {
         updated_at
       FROM projects
       ${whereSql}
-      ORDER BY schedule_at IS NULL, schedule_at ASC, name ASC
+      ORDER BY schedule_at IS NULL, schedule_at ASC, schedule_end_at ASC, name ASC
     `,
     params,
   );
@@ -379,6 +397,7 @@ async function listProjects({ publishedOnly = false, projectIds = null } = {}) {
       mapsUrl: row.maps_url ? String(row.maps_url) : "",
     },
     schedule: toUiDateTime(row.schedule_at),
+    scheduleEnd: toUiDateTime(row.schedule_end_at),
     beneficiaryTarget: String(row.beneficiary_target ?? ""),
     dependencies: dependenciesByProject.get(row.id) ?? [],
     publishState: row.publish_state === "published" ? "published" : "draft",
@@ -407,6 +426,7 @@ async function saveProject(projectPayload) {
           lng,
           maps_url,
           schedule_at,
+          schedule_end_at,
           beneficiary_target,
           publish_state,
           status,
@@ -414,7 +434,7 @@ async function saveProject(projectPayload) {
           created_at,
           updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         ON DUPLICATE KEY UPDATE
           name = VALUES(name),
           address = VALUES(address),
@@ -423,6 +443,7 @@ async function saveProject(projectPayload) {
           lng = VALUES(lng),
           maps_url = VALUES(maps_url),
           schedule_at = VALUES(schedule_at),
+          schedule_end_at = VALUES(schedule_end_at),
           beneficiary_target = VALUES(beneficiary_target),
           publish_state = VALUES(publish_state),
           status = VALUES(status),
@@ -438,6 +459,7 @@ async function saveProject(projectPayload) {
         project.location.lng,
         project.location.mapsUrl,
         toSqlDateTime(project.schedule),
+        toSqlDateTime(project.scheduleEnd),
         project.beneficiaryTarget,
         project.publishState,
         project.status,

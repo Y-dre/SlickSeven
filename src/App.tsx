@@ -118,6 +118,41 @@ function formatDateTime(value: string): string {
   }).format(date);
 }
 
+function formatScheduleRange(startValue: string, endValue: string): string {
+  if (!startValue && !endValue) {
+    return "No schedule";
+  }
+
+  if (!endValue) {
+    return formatDateTime(startValue);
+  }
+
+  if (!startValue) {
+    return formatDateTime(endValue);
+  }
+
+  const start = new Date(startValue);
+  const end = new Date(endValue);
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return `${startValue} - ${endValue}`;
+  }
+
+  const sameDay = start.toDateString() === end.toDateString();
+  const dateFormatter = new Intl.DateTimeFormat("en-PH", {
+    dateStyle: "medium",
+  });
+  const timeFormatter = new Intl.DateTimeFormat("en-PH", {
+    timeStyle: "short",
+  });
+
+  if (sameDay) {
+    return `${dateFormatter.format(start)}, ${timeFormatter.format(start)} - ${timeFormatter.format(end)}`;
+  }
+
+  return `${formatDateTime(startValue)} - ${formatDateTime(endValue)}`;
+}
+
 function isNumericOnly(value: string): boolean {
   return /^\d+(\.\d+)?$/.test(value.trim());
 }
@@ -133,6 +168,8 @@ function normalizeProject(project: AyudaProject): AyudaProject {
       address: project.location.address.trim(),
       mapsUrl: project.location.mapsUrl?.trim() ?? "",
     },
+    schedule: project.schedule,
+    scheduleEnd: project.scheduleEnd,
     dependencies: project.dependencies
       .map((item) => ({ ...item, label: item.label.trim() }))
       .filter((item) => item.label),
@@ -428,7 +465,7 @@ function App() {
                     </span>
                     <span>
                       <CalendarClock aria-hidden="true" size={14} />
-                      {formatDateTime(project.schedule)}
+                      {formatScheduleRange(project.schedule, project.scheduleEnd)}
                     </span>
                   </span>
                   <span className="project-row-meta">
@@ -496,11 +533,20 @@ function App() {
                 </label>
 
                 <label className="field">
-                  <span>Date & Time</span>
+                  <span>Start Date & Time</span>
                   <input
                     onChange={(event) => updateDraftField("schedule", event.target.value)}
                     type="datetime-local"
                     value={draft.schedule}
+                  />
+                </label>
+
+                <label className="field">
+                  <span>End Date & Time</span>
+                  <input
+                    onChange={(event) => updateDraftField("scheduleEnd", event.target.value)}
+                    type="datetime-local"
+                    value={draft.scheduleEnd}
                   />
                 </label>
 

@@ -50,6 +50,7 @@ function normalizeProject(project: AyudaProject): AyudaProject {
       mapsUrl: project.location?.mapsUrl ?? "",
     },
     schedule: project.schedule ?? "",
+    scheduleEnd: project.scheduleEnd ?? "",
     beneficiaryTarget: normalizeBeneficiaryClassification(project.beneficiaryTarget),
     dependencies: Array.isArray(project.dependencies)
       ? project.dependencies
@@ -97,6 +98,7 @@ export function createEmptyProject(): AyudaProject {
       mapsUrl: "",
     },
     schedule: "",
+    scheduleEnd: "",
     beneficiaryTarget: "",
     dependencies: defaultDependencyLabels.map((label) => createDependency(label)),
     publishState: "draft",
@@ -126,7 +128,15 @@ export function validateProjectForPublish(project: AyudaProject): ValidationResu
   }
 
   if (!project.schedule) {
-    errors.push("Date and time are required.");
+    errors.push("Start date and time are required.");
+  }
+
+  if (!project.scheduleEnd) {
+    errors.push("End date and time are required.");
+  }
+
+  if (project.schedule && project.scheduleEnd && new Date(project.scheduleEnd) < new Date(project.schedule)) {
+    errors.push("End date and time must be after the start date and time.");
   }
 
   if (!project.beneficiaryTarget.trim()) {
