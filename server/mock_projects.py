@@ -2,10 +2,12 @@ MOCK_PROJECTS = [
     {
         "id": "ayuda-mock-001",
         "name": "Senior Citizen Cash Assistance",
+        "description": "Cash assistance release for qualified senior citizens registered in the municipality.",
         "requirements": ["Valid ID", "Senior Citizen ID", "Barangay Certificate"],
         "eligibility": ["Age 60 and above", "Resident for at least 6 months"],
         "location": {
             "address": "Municipal Hall, Poblacion",
+            "city": "Manila",
             "placeId": "ChIJn9XTfA2blzMRyrQ4sYf6NAA",
             "lat": 14.5995,
             "lng": 120.9842,
@@ -28,10 +30,12 @@ MOCK_PROJECTS = [
     {
         "id": "ayuda-mock-002",
         "name": "PWD Food Pack Distribution",
+        "description": "Monthly food pack distribution for registered PWD beneficiaries.",
         "requirements": ["PWD ID", "Valid Government ID"],
         "eligibility": ["Registered PWD beneficiary", "Resident of the barangay"],
         "location": {
             "address": "Barangay Gymnasium, San Isidro",
+            "city": "Quezon City",
             "placeId": "ChIJ4X7M4fublzMRH6Z80w8FfA0",
             "lat": 14.6123,
             "lng": 120.9765,
@@ -54,10 +58,12 @@ MOCK_PROJECTS = [
     {
         "id": "ayuda-mock-003",
         "name": "Emergency Rice Relief",
+        "description": "Emergency rice distribution for households affected by recent flooding.",
         "requirements": ["Family Card", "Valid ID"],
         "eligibility": ["Affected by recent flooding"],
         "location": {
             "address": "Covered Court, Riverside",
+            "city": "Marikina",
             "placeId": "ChIJa0J9I7ublzMRSmvYtuYOD00",
             "lat": 14.6201,
             "lng": 121.0014,
@@ -81,10 +87,12 @@ MOCK_PROJECTS = [
     {
         "id": "ayuda-mock-004",
         "name": "Single Parent Transport Assistance",
+        "description": "Transport allowance support for solo parents with enrolled school-age dependents.",
         "requirements": ["Solo Parent ID", "Valid ID", "School Enrollment Slip"],
         "eligibility": ["Single parent with enrolled student"],
         "location": {
             "address": "City Social Welfare Office",
+            "city": "Pasig",
             "mapsUrl": "",
         },
         "schedule": "2026-06-20T10:00",
@@ -104,10 +112,12 @@ MOCK_PROJECTS = [
     {
         "id": "ayuda-mock-005",
         "name": "Draft Medical Aid Intake",
+        "description": "Initial intake schedule for medical aid assessment and case validation.",
         "requirements": ["Medical Abstract", "Hospital Bill"],
         "eligibility": ["Low-income household"],
         "location": {
             "address": "District Office 2",
+            "city": "Pasay",
             "mapsUrl": "",
         },
         "schedule": "",
@@ -127,10 +137,12 @@ MOCK_PROJECTS = [
     {
         "id": "ayuda-mock-006",
         "name": "Draft Livelihood Starter Kit",
+        "description": "Application intake for livelihood starter kits for qualified unemployed residents.",
         "requirements": ["Business Plan", "Valid ID", "Barangay Clearance"],
         "eligibility": ["Unemployed resident", "Completed skills orientation"],
         "location": {
             "address": "TESDA Partner Center",
+            "city": "Makati",
             "placeId": "ChIJj2-5J7ublzMRBvlTYQG1MzA",
             "lat": 14.575,
             "lng": 120.99,
@@ -154,10 +166,12 @@ MOCK_PROJECTS = [
     {
         "id": "ayuda-mock-007",
         "name": "Fisherfolk Fuel Subsidy",
+        "description": "Fuel subsidy release for registered fisherfolk operating in municipal waters.",
         "requirements": ["Fisherfolk Registry ID", "Boat Registration"],
         "eligibility": ["Registered fisherfolk", "Active within municipal waters"],
         "location": {
             "address": "Port Authority Satellite Office",
+            "city": "Navotas",
             "placeId": "ChIJOxwV9mWblzMRg6mXaZtKxO4",
             "lat": 14.545,
             "lng": 120.97,
@@ -181,10 +195,12 @@ MOCK_PROJECTS = [
     {
         "id": "ayuda-mock-008",
         "name": "Daily Wage Worker Meal Support",
+        "description": "Meal support distribution for qualified daily wage workers in priority zones.",
         "requirements": ["Employment Certificate", "Valid ID"],
         "eligibility": ["Daily wage earner", "No active subsidy in current month"],
         "location": {
             "address": "Community Center, North Zone",
+            "city": "Caloocan",
             "mapsUrl": "",
         },
         "schedule": "2026-06-11T11:30",

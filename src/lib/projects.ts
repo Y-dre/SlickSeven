@@ -36,6 +36,7 @@ function normalizeProject(project: AyudaProject): AyudaProject {
   return {
     ...project,
     name: typeof project.name === "string" ? project.name : "",
+    description: typeof project.description === "string" ? project.description.trim() : "",
     requirements: Array.isArray(project.requirements)
       ? project.requirements.filter((item): item is string => typeof item === "string")
       : [],
@@ -44,6 +45,7 @@ function normalizeProject(project: AyudaProject): AyudaProject {
       : [],
     location: {
       address: project.location?.address ?? "",
+      city: typeof project.location?.city === "string" ? project.location.city.trim() : "",
       placeId: project.location?.placeId,
       lat: project.location?.lat ?? mapPosition?.lat,
       lng: project.location?.lng ?? mapPosition?.lng,
@@ -91,10 +93,12 @@ export function createEmptyProject(): AyudaProject {
   return {
     id: createId("ayuda"),
     name: "",
+    description: "",
     requirements: [],
     eligibility: [],
     location: {
       address: "",
+      city: "",
       mapsUrl: "",
     },
     schedule: "",
@@ -203,6 +207,14 @@ export async function saveProject(project: AyudaProject, fetchFn: typeof fetch =
   );
 
   return normalizeProject(saved);
+}
+
+export async function deleteProject(projectId: string, fetchFn: typeof fetch = fetch): Promise<void> {
+  await requestProjects<{ deleted: boolean }>(
+    `${PROJECTS_API_PATH}/${encodeURIComponent(projectId)}`,
+    { method: "DELETE" },
+    fetchFn,
+  );
 }
 
 export async function saveProjects(

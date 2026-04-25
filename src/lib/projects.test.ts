@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   PROJECTS_API_PATH,
   createEmptyProject,
+  deleteProject,
   loadProjects,
   loadPublishedProjects,
   saveProject,
@@ -21,6 +22,10 @@ function createProject(overrides: Partial<AyudaProject> = {}): AyudaProject {
     eligibility: ["Barangay resident"],
     location: {
       address: "Municipal Hall",
+      city: "",
+      placeId: undefined,
+      lat: undefined,
+      lng: undefined,
       mapsUrl: "",
     },
     schedule: "2026-05-01T09:00",
@@ -136,6 +141,17 @@ describe("project helpers", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(saved).toEqual([first, second]);
+  });
+
+  it("deletes a project entry through the API", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ deleted: true }));
+
+    await deleteProject("ayuda-test-1", fetchMock as unknown as typeof fetch);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${PROJECTS_API_PATH}/ayuda-test-1`,
+      expect.objectContaining({ method: "DELETE" }),
+    );
   });
 
   it("throws when API responds with an error", async () => {

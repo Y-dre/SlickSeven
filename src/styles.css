@@ -285,6 +285,10 @@ button:disabled {
   min-width: 0;
 }
 
+.field.full {
+  grid-column: 1 / -1;
+}
+
 .field span {
   color: var(--muted);
   font-size: 0.82rem;
@@ -353,12 +357,24 @@ button:disabled {
   color: #1d2329;
 }
 
+.button.danger {
+  background: #ffffff;
+  border-color: #f1b5b1;
+  color: var(--red);
+}
+
 .button.ghost:hover,
 .button.secondary:hover,
 .button.compact:hover,
 .link-button:hover {
   border-color: var(--accent);
   color: var(--accent-dark);
+}
+
+.button.danger:hover {
+  background: #ffe9e7;
+  border-color: #de6b62;
+  color: #8f1d13;
 }
 
 .button.full {
@@ -770,6 +786,39 @@ button:disabled {
 
 .user-empty-detail {
   min-height: 420px;
+}
+
+.modal-backdrop {
+  align-items: center;
+  background: rgba(18, 28, 38, 0.45);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 20px;
+  position: fixed;
+  z-index: 20;
+}
+
+.modal-card {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  max-width: 760px;
+  padding: 18px;
+  width: min(100%, 760px);
+}
+
+.modal-header {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.modal-header h3 {
+  margin: 0;
 }
 
 @media (max-width: 1100px) {

@@ -25,7 +25,9 @@ def main() -> None:
                     INSERT INTO projects (
                       id,
                       name,
+                      description,
                       address,
+                      city,
                       place_id,
                       lat,
                       lng,
@@ -39,12 +41,14 @@ def main() -> None:
                       created_at,
                       updated_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     [
                         project["id"],
                         project["name"],
+                        project.get("description", ""),
                         location["address"],
+                        location.get("city", ""),
                         location.get("placeId"),
                         location.get("lat"),
                         location.get("lng"),

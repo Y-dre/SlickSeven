@@ -12,12 +12,14 @@ import {
   Save,
   Search,
   Send,
+  Trash2,
   Users,
 } from "lucide-react";
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   createDependency,
   createEmptyProject,
+  deleteProject,
   isProjectReady,
   loadProjects,
   saveProject,
@@ -161,11 +163,13 @@ function normalizeProject(project: AyudaProject): AyudaProject {
   return {
     ...project,
     name: project.name.trim(),
+    description: project.description.trim(),
     requirements: sanitizeLineList(project.requirements.join("\n")),
     eligibility: sanitizeLineList(project.eligibility.join("\n")),
     location: {
       ...project.location,
       address: project.location.address.trim(),
+      city: project.location.city?.trim() ?? "",
       mapsUrl: project.location.mapsUrl?.trim() ?? "",
     },
     schedule: project.schedule,
@@ -209,7 +213,9 @@ function App() {
       const matchesQuery =
         !normalizedQuery ||
         project.name.toLowerCase().includes(normalizedQuery) ||
-        project.location.address.toLowerCase().includes(normalizedQuery);
+        project.description.toLowerCase().includes(normalizedQuery) ||
+        project.location.address.toLowerCase().includes(normalizedQuery) ||
+        (project.location.city ?? "").toLowerCase().includes(normalizedQuery);
       const matchesStatus = project.status === statusFilter;
       const ready = isProjectReady(project);
       const matchesReadiness =
@@ -337,6 +343,34 @@ function App() {
     );
   }
 
+  async function deleteCurrentProject() {
+    if (!draftIsSaved) {
+      return;
+    }
+
+    const shouldDelete = window.confirm(`Delete "${draft.name || "this project"}"? This action cannot be undone.`);
+
+    if (!shouldDelete) {
+      return;
+    }
+
+    try {
+      setIsSyncing(true);
+      await deleteProject(draft.id);
+      setProjects((current) => current.filter((project) => project.id !== draft.id));
+      setDraft(createEmptyProject());
+      setSelectedProjectId(null);
+      setFormErrors([]);
+      setFormMessage("Project deleted from database.");
+      setNewDependencyLabel("");
+    } catch {
+      setFormErrors(["Could not delete the project from the database."]);
+      setFormMessage("");
+    } finally {
+      setIsSyncing(false);
+    }
+  }
+
   function updateDraftField<K extends keyof AyudaProject>(key: K, value: AyudaProject[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
     setFormMessage("");
@@ -412,7 +446,7 @@ function App() {
             <input
               aria-label="Search projects"
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search name or venue"
+              placeholder="Search name, venue, or city"
               value={query}
             />
           </label>
@@ -432,7 +466,7 @@ function App() {
               onChange={(event) => setReadinessFilter(event.target.value as "all" | "ready" | "not-ready")}
               value={readinessFilter}
             >
-              <option value="all">All readiness</option>
+              <option value="all">All</option>
               <option value="ready">All ready</option>
               <option value="not-ready">Missing items</option>
             </select>
@@ -462,6 +496,7 @@ function App() {
                     <span>
                       <MapPin aria-hidden="true" size={14} />
                       {project.location.address || "No venue"}
+                      {project.location.city ? `, ${project.location.city}` : ""}
                     </span>
                     <span>
                       <CalendarClock aria-hidden="true" size={14} />
@@ -488,6 +523,12 @@ function App() {
               <h2>{draft.name || "Untitled Ayuda"}</h2>
             </div>
             <div className="editor-actions">
+              {draftIsSaved ? (
+                <button className="button danger" disabled={isSyncing} onClick={() => void deleteCurrentProject()} type="button">
+                  <Trash2 aria-hidden="true" size={18} />
+                  Delete
+                </button>
+              ) : null}
               <button className="button secondary" disabled={isSyncing} onClick={() => void saveDraft()} type="button">
                 <Save aria-hidden="true" size={18} />
                 {draft.publishState === "published" ? "Save Changes" : "Save Draft"}
@@ -529,6 +570,16 @@ function App() {
                     onChange={(event) => updateDraftField("name", event.target.value)}
                     placeholder="Example: Senior Citizen Cash Assistance"
                     value={draft.name}
+                  />
+                </label>
+
+                <label className="field full">
+                  <span>Description</span>
+                  <textarea
+                    onChange={(event) => updateDraftField("description", event.target.value)}
+                    placeholder="Add announcement details for beneficiaries."
+                    rows={3}
+                    value={draft.description}
                   />
                 </label>
 
@@ -970,6 +1021,14 @@ function GoogleMapsLocationField({ location, onChange }: GoogleMapsLocationField
             placeholder="Search or enter venue address"
             ref={inputRef}
             value={location.address}
+          />
+        </label>
+        <label className="field">
+          <span>City</span>
+          <input
+            onChange={(event) => onChange({ ...location, city: event.target.value })}
+            placeholder="Example: Manila"
+            value={location.city ?? ""}
           />
         </label>
         <label className="field">
